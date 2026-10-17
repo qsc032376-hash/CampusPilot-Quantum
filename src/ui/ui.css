@@ -1,0 +1,366 @@
+/*
+ * CampusPilot dashboard styles.
+ * Everything is scoped under .cp-app so the existing src/style.css keeps its
+ * own role and no global selector is redefined.
+ */
+.cp-app {
+  --cp-ink: #24292b;
+  --cp-muted: #5f6660;
+  --cp-soft: #7b837f;
+  --cp-line: #dedfd8;
+  --cp-surface: #ffffff;
+  --cp-tint: #fbfaf7;
+  --cp-brand: #a51d2d;
+  --cp-brand-dark: #821524;
+  color: var(--cp-ink);
+}
+
+/* ---------- header ---------- */
+.cp-header {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px 28px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 24px 18px;
+  border-bottom: 1px solid var(--cp-line);
+}
+.cp-header__identity { min-width: 0; }
+.cp-brand {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--cp-brand);
+}
+.cp-app .cp-header__title {
+  margin: 8px 0 0;
+  font-size: clamp(20px, 2.4vw, 27px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.cp-header__meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--cp-soft);
+}
+.cp-stats {
+  display: flex;
+  gap: 22px;
+  margin: 0 0 0 auto;
+}
+.cp-stats__item dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cp-soft);
+}
+.cp-stats__item dd {
+  margin: 3px 0 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* ---------- layout ---------- */
+.cp-main {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 22px 24px;
+}
+.cp-column { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+.cp-panel {
+  background: var(--cp-surface);
+  border: 1px solid var(--cp-line);
+  border-radius: 14px;
+  padding: 18px;
+  min-width: 0;
+}
+.cp-panel__head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.cp-panel__meta {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  color: var(--cp-soft);
+}
+.cp-panel__foot {
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--cp-soft);
+}
+.cp-app .cp-subhead {
+  margin: 20px 0 8px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cp-soft);
+}
+.cp-hint { margin: 8px 0 0; font-size: 12px; color: var(--cp-soft); }
+
+/* ---------- buttons ---------- */
+.cp-app .cp-button {
+  margin: 0;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--cp-brand);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease-out;
+}
+.cp-app .cp-button:hover { background: var(--cp-brand-dark); }
+.cp-app .cp-button:focus-visible { outline: 3px solid var(--cp-ink); outline-offset: 3px; }
+.cp-app .cp-button span { margin-left: 8px; }
+.cp-app .cp-button--ghost {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid #cfd1c8;
+  color: var(--cp-ink);
+}
+.cp-app .cp-button--ghost:hover { background: #efece5; }
+.cp-app .cp-button--full { width: 100%; }
+
+.cp-app .cp-link {
+  border: 0;
+  background: none;
+  margin: 0;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8f1c2a;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.cp-app .cp-link:hover { background: none; color: #5f1019; }
+
+/* ---------- form ---------- */
+.cp-form { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.cp-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cp-field__label { font-size: 11.5px; font-weight: 700; color: #4b524e; }
+.cp-field-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; }
+.cp-input {
+  min-width: 0;
+  border: 1px solid #d5d6cd;
+  border-radius: 9px;
+  background: #fdfcf9;
+  color: var(--cp-ink);
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+.cp-input:focus-visible { outline: 2px solid var(--cp-brand); outline-offset: 1px; }
+.cp-error { margin: 0; font-size: 12px; font-weight: 600; color: #a11a2a; }
+
+.cp-tasks { list-style: none; margin: 0; padding: 0; }
+.cp-tasks__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f0efe8;
+  font-size: 13px;
+}
+.cp-tasks__title { font-weight: 600; overflow-wrap: anywhere; }
+.cp-tasks__meta { grid-column: 1; font-size: 11.5px; color: var(--cp-soft); }
+.cp-app .cp-tasks__row .cp-link { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+
+/* ---------- timeline ---------- */
+.cp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  list-style: none;
+  margin: 12px 0 14px;
+  padding: 0;
+  font-size: 11.5px;
+  color: var(--cp-muted);
+}
+.cp-legend__item { display: flex; align-items: center; gap: 6px; }
+.cp-dot { width: 10px; height: 10px; border-radius: 3px; border-left: 3px solid; }
+.cp-dot--class { background: #eceee9; border-color: #7d8781; }
+.cp-dot--busy { background: #eeece5; border-color: #b3b6ad; }
+.cp-dot--study { background: #fdf0f1; border-color: var(--cp-brand); }
+
+.cp-timeline { display: flex; gap: 8px; }
+.cp-timeline__gutter { position: relative; flex: none; width: 60px; }
+.cp-timeline__tick {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cp-soft);
+}
+.cp-timeline__track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--cp-tint);
+  border: 1px solid var(--cp-line);
+  border-radius: 10px;
+}
+.cp-timeline__line { position: absolute; left: 0; right: 0; border-top: 1px dashed #e6e5de; }
+
+.cp-block {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  margin: 0;
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 0 8px 8px 0;
+  font: inherit;
+  text-align: left;
+  transition: box-shadow 140ms ease-out, background 140ms ease-out;
+}
+.cp-block__time { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cp-block__title {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cp-block--class { background: #eceee9; border-left-color: #7d8781; color: #2b3230; }
+.cp-block--busy {
+  background: repeating-linear-gradient(135deg, #f3f2ec, #f3f2ec 6px, #e9e8e1 6px, #e9e8e1 12px);
+  border-left-color: #b3b6ad;
+  color: #5f6660;
+}
+.cp-app .cp-block--study {
+  background: #fdf0f1;
+  border-left-color: var(--cp-brand);
+  color: #7d1622;
+  cursor: pointer;
+}
+.cp-app .cp-block--study:hover { background: #fbe6e8; }
+.cp-app .cp-block--study.is-selected { outline: 2px solid var(--cp-brand); outline-offset: 1px; }
+.cp-app .cp-block--study:focus-visible { outline: 3px solid var(--cp-ink); outline-offset: 2px; }
+
+.cp-timeline__empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 82%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+/* ---------- results ---------- */
+.cp-results__totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 12px;
+  background: var(--cp-tint);
+  border-radius: 10px;
+}
+.cp-results__totals dt {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--cp-soft);
+}
+.cp-results__totals dd { margin: 3px 0 0; font-size: 15px; font-weight: 700; }
+
+.cp-sessions { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; }
+.cp-app .cp-session {
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: #7d1622;
+  background: #fdf0f1;
+  border: 1px solid #f0d7d9;
+  border-left: 3px solid var(--cp-brand);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 140ms ease-out;
+}
+.cp-app .cp-session:hover { background: #fbe6e8; }
+.cp-app .cp-session.is-selected { outline: 2px solid var(--cp-brand); outline-offset: 1px; }
+.cp-app .cp-session:focus-visible { outline: 3px solid var(--cp-ink); outline-offset: 2px; }
+.cp-session__time { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cp-session__title { font-size: 13px; font-weight: 600; }
+
+.cp-unscheduled { list-style: none; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; }
+.cp-unscheduled__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #f3e3b8;
+  border-radius: 8px;
+}
+.cp-unscheduled__row strong { font-size: 12.5px; color: #7a4d06; }
+.cp-unscheduled__row span { font-size: 11.5px; line-height: 1.45; color: #8a6a25; }
+
+/* ---------- empty / location ---------- */
+.cp-empty {
+  margin-top: 14px;
+  padding: 18px 14px;
+  text-align: center;
+  background: var(--cp-tint);
+  border: 1px dashed #d9d9d0;
+  border-radius: 10px;
+}
+.cp-empty__title { margin: 0; font-size: 13px; font-weight: 700; color: #3b423f; }
+.cp-empty__message { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--cp-soft); }
+
+.cp-location__name { margin: 14px 0 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.cp-location__task { margin: 4px 0 0; font-size: 12.5px; color: var(--cp-muted); }
+
+.cp-foot {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 4px 24px 32px;
+  font-size: 11.5px;
+  color: var(--cp-soft);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .cp-main { grid-template-columns: 300px minmax(0, 1fr); }
+  .cp-main > .cp-column:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 840px) {
+  .cp-main { grid-template-columns: 1fr; padding: 18px; }
+  .cp-main > .cp-column:last-child { grid-column: auto; }
+  .cp-header { padding: 20px 18px 16px; }
+  .cp-stats { margin: 0; }
+  .cp-app .cp-button--ghost { margin-left: 0; }
+  .cp-foot { padding: 0 18px 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-app * { transition: none !important; }
+}
