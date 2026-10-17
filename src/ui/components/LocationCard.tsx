@@ -1,15 +1,18 @@
 import type { ScheduleRequest, StudyBlock } from '../../types.ts';
 import { formatDayShort, formatDuration, formatRangeDetailed } from '../format.ts';
 import { EmptyState } from './EmptyState.tsx';
+
 interface LocationCardProps {
   block: StudyBlock | null;
   request: ScheduleRequest;
 }
 
 /**
- * Shows the campus location attached to the selected study block. The shared
- * contract only carries a location id and name, so this card deliberately makes
- * no claim about opening hours, rooms, or current availability.
+ * Shows the campus location attached to the selected study block.
+ *
+ * Building, room and hours are optional in the shared contract. Missing values
+ * are simply not rendered rather than filled in, and any supplied hours are
+ * labelled as demo text: this prototype never claims live availability.
  */
 export function LocationCard({ block, request }: LocationCardProps) {
   if (!block) {
@@ -26,6 +29,11 @@ export function LocationCard({ block, request }: LocationCardProps) {
   const location = request.locations.find((candidate) => candidate.id === block.locationId);
   const minutes = (Date.parse(block.end) - Date.parse(block.start)) / 60_000;
 
+  const details: { label: string; value: string }[] = [];
+  if (location?.building) details.push({ label: 'Building', value: location.building });
+  if (location?.room) details.push({ label: 'Room', value: location.room });
+  if (location?.hours) details.push({ label: 'Listed hours', value: location.hours });
+
   return (
     <section className="cp-panel" aria-labelledby="cp-location-heading-detail">
       <div className="cp-panel__head">
@@ -40,8 +48,24 @@ export function LocationCard({ block, request }: LocationCardProps) {
         {block.title} · {formatDuration(minutes)}
       </p>
 
+      {details.length > 0 ? (
+        <dl className="cp-location__details">
+          {details.map((detail) => (
+            <div key={detail.label} className="cp-location__row">
+              <dt>{detail.label}</dt>
+              <dd>{detail.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="cp-hint">No building or room details supplied for this location.</p>
+      )}
+
       <p className="cp-panel__foot">
-        The prototype does not verify building hours, room availability, or travel time between sessions.
+        {details.some((detail) => detail.label === 'Listed hours')
+          ? 'Listed hours are demo text, not live availability. '
+          : ''}
+        This prototype does not verify room availability or travel time between sessions.
       </p>
     </section>
   );

@@ -22,6 +22,17 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
     return request.tasks.find((task) => task.id === taskId)?.title ?? taskId;
   }
 
+  /** Conflict ids refer to classes, unavailable periods or returned study blocks. */
+  function eventTitle(id: string): string {
+    const event =
+      request.classes.find((candidate) => candidate.id === id) ??
+      request.unavailablePeriods.find((candidate) => candidate.id === id) ??
+      result?.blocks.find((candidate) => candidate.id === id);
+    return event?.title ?? id;
+  }
+
+  const conflicts = result?.conflicts ?? [];
+
   const crossDay = formatDayShort(request.windowStart) !== formatDayShort(request.windowEnd);
   const startDay = formatDayShort(request.windowStart);
 
@@ -90,6 +101,24 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
                   </li>
                 );
               })}
+            </ul>
+          )}
+
+          <h3 className="cp-subhead">Conflicts</h3>
+          {conflicts.length === 0 ? (
+            <p className="cp-hint">No overlapping commitments reported for this window.</p>
+          ) : (
+            <ul className="cp-conflicts">
+              {conflicts.map((conflict) => (
+                <li key={`${conflict.firstId}__${conflict.secondId}`} className="cp-conflicts__row">
+                  <span className="cp-conflicts__pair">
+                    <strong>{eventTitle(conflict.firstId)}</strong>
+                    <span aria-hidden="true"> ↔ </span>
+                    <strong>{eventTitle(conflict.secondId)}</strong>
+                  </span>
+                  <span className="cp-conflicts__meta">{formatDuration(conflict.overlapMinutes)} overlap</span>
+                </li>
+              ))}
             </ul>
           )}
 

@@ -10,6 +10,11 @@ const entry = `
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { WeeklySchedule } from './src/ui/components/WeeklySchedule.tsx';
+import { ScheduleResults } from './src/ui/components/ScheduleResults.tsx';
+import { LocationCard } from './src/ui/components/LocationCard.tsx';
+import { TaskForm } from './src/ui/components/TaskForm.tsx';
+import { sampleRequest } from './src/sample.ts';
+import { generateMockSchedule } from './src/scheduler.ts';
 
 const results = [];
 function check(name, ok, detail) {
@@ -119,6 +124,97 @@ check(
   JSON.stringify(normalBlocks[0]),
 );
 check('window label carries both zones', normalHtml.includes('EDT') || normalHtml.includes('EST'), '');
+
+// --- shared contracts: conflicts, location details, task metadata ---
+const contractResult = generateMockSchedule(sampleRequest);
+const conflicts = contractResult.conflicts || [];
+check('sample schedule reports one conflict pair', conflicts.length === 1, JSON.stringify(conflicts));
+
+const conflictScheduleHtml = renderToStaticMarkup(
+  createElement(WeeklySchedule, { request: sampleRequest, result: contractResult, selectedId: null, onSelect: () => {} }),
+);
+check(
+  'conflicting events carry a conflict marker and badge',
+  conflictScheduleHtml.includes('is-conflict') && conflictScheduleHtml.includes('cp-badge'),
+  '',
+);
+check('conflict legend row appears', conflictScheduleHtml.includes('cp-dot--conflict'), '');
+check('conflict count is announced to the user', conflictScheduleHtml.includes('conflicting'), '');
+
+const conflictResultsHtml = renderToStaticMarkup(
+  createElement(ScheduleResults, {
+    request: sampleRequest,
+    result: contractResult,
+    message: null,
+    onBuild: () => {},
+    selectedId: null,
+    onSelect: () => {},
+  }),
+);
+check(
+  'results list both conflicting events by title',
+  conflictResultsHtml.includes('Math lecture') && conflictResultsHtml.includes('Advising slot'),
+  '',
+);
+check('results show the overlap duration', conflictResultsHtml.includes('30 min overlap'), '');
+
+const detailedRequest = {
+  ...sampleRequest,
+  locations: [
+    {
+      id: 'thompson',
+      name: 'Thompson Library',
+      building: 'Thompson Library',
+      room: 'Room 304',
+      hours: '8:00 AM - 11:00 PM (demo only)',
+    },
+  ],
+};
+const detailedHtml = renderToStaticMarkup(
+  createElement(LocationCard, { block: contractResult.blocks[0], request: detailedRequest }),
+);
+check(
+  'location details render when supplied',
+  detailedHtml.includes('Building') && detailedHtml.includes('Room 304') && detailedHtml.includes('Listed hours'),
+  '',
+);
+check('listed hours are labelled as demo text', detailedHtml.includes('demo text'), '');
+
+const plainHtml = renderToStaticMarkup(
+  createElement(LocationCard, { block: contractResult.blocks[0], request: sampleRequest }),
+);
+check(
+  'missing location details fall back without inventing values',
+  plainHtml.includes('No building or room details supplied') && !plainHtml.includes('Listed hours'),
+  '',
+);
+
+const taskRequest = {
+  ...sampleRequest,
+  tasks: [
+    {
+      id: 't1',
+      title: 'Tagged task',
+      durationMinutes: 30,
+      dueAt: sampleRequest.windowEnd,
+      priority: 'high',
+      courseCode: 'CSE 201',
+    },
+  ],
+};
+const formHtml = renderToStaticMarkup(
+  createElement(TaskForm, { request: taskRequest, onAdd: () => {}, onRemove: () => {} }),
+);
+check(
+  'task form exposes optional priority and course code',
+  formHtml.includes('Priority (optional)') && formHtml.includes('Course code (optional)'),
+  '',
+);
+check(
+  'task list shows priority and course code',
+  formHtml.includes('CSE 201') && formHtml.includes('cp-tag--high'),
+  '',
+);
 
 const failed = results.filter((ok) => !ok).length;
 console.log('\\nSUMMARY ' + (results.length - failed) + '/' + results.length + ' passed');

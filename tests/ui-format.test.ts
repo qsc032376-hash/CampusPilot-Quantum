@@ -230,3 +230,37 @@ test('ordinary and spring-gap times still validate as before', () => {
   const emptyTitle = resolveTaskInput({ ...ambiguousBase, title: '   ', choice: null });
   assert.equal(emptyTitle.ok, false);
 });
+
+const plainBase = {
+  title: 'Read',
+  duration: '30',
+  due: '2026-10-19T12:00',
+  choice: null,
+  windowStart: '2026-10-19T09:00:00-04:00',
+};
+
+test('optional priority and course code reach the draft', () => {
+  const result = resolveTaskInput({ ...plainBase, priority: 'high', courseCode: 'CSE 201' });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.draft.priority, 'high');
+    assert.equal(result.draft.courseCode, 'CSE 201');
+  }
+});
+
+test('blank optional metadata is omitted rather than stored empty', () => {
+  const result = resolveTaskInput({ ...plainBase, priority: '', courseCode: '   ' });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.draft.priority, undefined);
+    assert.equal(result.draft.courseCode, undefined);
+    assert.equal('priority' in result.draft, false);
+    assert.equal('courseCode' in result.draft, false);
+  }
+});
+
+test('invalid priority and overlong course codes are rejected', () => {
+  assert.equal(resolveTaskInput({ ...plainBase, priority: 'urgent' }).ok, false);
+  assert.equal(resolveTaskInput({ ...plainBase, courseCode: 'C'.repeat(13) }).ok, false);
+  assert.equal(resolveTaskInput({ ...plainBase, priority: 'medium' }).ok, true);
+});
