@@ -4,6 +4,9 @@ export const sampleRequest: ScheduleRequest = {
   windowStart: '2026-10-19T09:00:00-04:00',
   windowEnd: '2026-10-19T17:00:00-04:00',
   classes: [
+    { id: 'early-class', title: 'Early class (outside window)', start: '2026-10-19T07:00:00-04:00', end: '2026-10-19T08:00:00-04:00' },
+    { id: 'morning-class', title: 'Morning class (partly outside window)', start: '2026-10-19T08:00:00-04:00', end: '2026-10-19T10:00:00-04:00' },
+    { id: 'advising', title: 'Advising slot', start: '2026-10-19T14:30:00-04:00', end: '2026-10-19T15:00:00-04:00' },
     { id: 'cse', title: 'CSE lecture', start: '2026-10-19T10:00:00-04:00', end: '2026-10-19T11:00:00-04:00' },
     { id: 'math', title: 'Math lecture', start: '2026-10-19T14:00:00-04:00', end: '2026-10-19T15:00:00-04:00' },
   ],

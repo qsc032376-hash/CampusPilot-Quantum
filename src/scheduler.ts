@@ -1,4 +1,4 @@
-import type { ScheduleRequest, ScheduleResponse } from './types.ts';
+import type { ScheduleConflict, ScheduleRequest, ScheduleResponse } from './types.ts';
 
 const MINUTE = 60_000;
 function timestamp(value: string): number {
@@ -56,5 +56,34 @@ export function generateMockSchedule(request: ScheduleRequest): ScheduleResponse
     });
   }
   response.blocks.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  // Report only after placement; this never changes occupied intervals or task order.
+  const conflicts = findConflicts(request, response.blocks, start, end);
+  if (conflicts.length > 0) response.conflicts = conflicts;
   return response;
+}
+
+function findConflicts(
+  request: ScheduleRequest,
+  blocks: ScheduleResponse['blocks'],
+  windowStart: number,
+  windowEnd: number,
+): ScheduleConflict[] {
+  const ids = new Set<string>();
+  const intervals = [...request.classes, ...request.unavailablePeriods, ...blocks].map(event => {
+    if (ids.has(event.id)) throw new Error('Class, unavailable period and study block IDs must be unique across collections.');
+    ids.add(event.id);
+    return { id: event.id, start: Math.max(windowStart, timestamp(event.start)), end: Math.min(windowEnd, timestamp(event.end)) };
+  }).filter(event => event.end > event.start)
+    .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+  const conflicts: ScheduleConflict[] = [];
+  for (let first = 0; first < intervals.length; first += 1) {
+    for (let second = first + 1; second < intervals.length; second += 1) {
+      const a = intervals[first];
+      const b = intervals[second];
+      const overlap = Math.min(a.end, b.end) - Math.max(a.start, b.start);
+      if (overlap > 0) conflicts.push({ firstId: a.id, secondId: b.id, overlapMinutes: overlap / MINUTE });
+    }
+  }
+  return conflicts;
 }
