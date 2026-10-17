@@ -9,6 +9,9 @@
  *
  * Where a window is based on a published page, the note says so. Even then it
  * is static: the page may have changed and holidays are not handled.
+ *
+ * Every window belongs to one calendar day. A window cannot cross midnight;
+ * early-morning hours (e.g. 02:00-04:00) are part of that day's window.
  */
 
 export type DayOfWeek = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';

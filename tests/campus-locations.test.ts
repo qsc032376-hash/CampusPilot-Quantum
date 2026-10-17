@@ -131,7 +131,7 @@ test('17. FAES is closed on Saturday', () => {
   assert.equal(isLocationOpen('faes-library', { day: 'Sat', startMinutes: 600, endMinutes: 720 }), false);
 });
 
-test('18. 18th Avenue is open overnight on Wednesday', () => {
+test('18. 18th Avenue is open in the early morning on Wednesday', () => {
   assert.equal(isLocationOpen('18th-avenue-library', { day: 'Wed', startMinutes: 120, endMinutes: 240 }), true);
 });
 
@@ -200,4 +200,18 @@ test('28. walk estimates are symmetric and formatting is correct', () => {
   assert.equal(formatClockTime(720), '12:00 PM');
   assert.equal(formatTimeRange({ startMinutes: 0, endMinutes: 1440 }), 'all day');
   assert.equal(formatTimeRange({ startMinutes: 450, endMinutes: 1440 }), '7:30 AM–midnight');
+});
+
+test('29. identical coordinates return 0 minutes and survive maxWalkMinutes: 0', () => {
+  assert.equal(estimateWalkMinutes(fromThompson, fromThompson), 0);
+
+  const results = recommendLocations(mondayMorning, { origin: fromThompson, maxWalkMinutes: 0 });
+  assert.deepEqual(results.map((result) => result.location.id), ['thompson-library']);
+  assert.equal(results[0]!.walkMinutes, 0);
+
+  // Normal positive limits still filter as before.
+  const nearby = recommendLocations(mondayMorning, { origin: fromThompson, maxWalkMinutes: 5 });
+  assert.ok(nearby.length > 0);
+  assert.ok(nearby.every((result) => (result.walkMinutes ?? 0) <= 5));
+  assert.ok(nearby.every((result) => result.location.id !== 'faes-library'));
 });

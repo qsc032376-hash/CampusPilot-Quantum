@@ -20,9 +20,9 @@ export interface CampusLocationDetails extends CampusLocation {
   category: CampusLocationCategory;
   /** Street address as published by Ohio State. */
   address: string;
-  /** Approximate building location (roughly 10-30 m). Not for navigation. */
+  /** Approximate building coordinate; precision is unverified. Not for navigation. */
   coordinates: GeoPoint;
-  /** True only when an official Ohio State page offers study-room booking. */
+  /** True only when an official page offers bookable study rooms. False means "not verified", not proof that none exists. */
   reservable: boolean;
   /** Official booking page; present only when `reservable` is true. */
   reservationUrl?: string;

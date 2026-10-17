@@ -15,9 +15,10 @@ import type { CampusLocationDetails } from './types.ts';
  *   verified, so none is claimed. See `simulatedAvailability.ts` for the
  *   clearly labelled mock schedule.
  *
- * Coordinates come from OpenStreetMap building records because the OSU campus
- * map has no public coordinate endpoint. They are approximate and only used
- * for walking-time estimates.
+ * Coordinates are approximate building points taken from OpenStreetMap
+ * Nominatim lookups (building way, returned point). Their precision has
+ * NOT been verified; they are used only for walking-time ranking. The OSM way
+ * for each location is recorded beside its coordinates and in README.md.
  */
 export const LOCATION_DATA_VERIFIED_ON = '2026-10-17';
 
@@ -27,6 +28,7 @@ export const CAMPUS_LOCATIONS: readonly CampusLocationDetails[] = [
     name: 'Thompson Library',
     category: 'library',
     address: '1858 Neil Avenue Mall, Columbus, OH 43210',
+    // OSM way 30172308 (William Oxley Thompson Memorial Library); precision unverified.
     coordinates: { lat: 39.999263, lng: -83.0149043 },
     reservable: true,
     reservationUrl: 'https://libraryroombooking.cloud.osu.edu/',
@@ -39,6 +41,7 @@ export const CAMPUS_LOCATIONS: readonly CampusLocationDetails[] = [
     name: '18th Avenue Library',
     category: 'library',
     address: '175 West 18th Avenue, Columbus, OH 43210',
+    // OSM way 154204806 (18th Avenue Library); precision unverified.
     coordinates: { lat: 40.0015988, lng: -83.0133326 },
     reservable: true,
     reservationUrl: 'https://libraryroombooking.cloud.osu.edu/',
@@ -51,6 +54,7 @@ export const CAMPUS_LOCATIONS: readonly CampusLocationDetails[] = [
     name: 'Health Sciences Library',
     category: 'library',
     address: '376 West 10th Avenue (Prior Hall), Columbus, OH 43210',
+    // OSM way 154204631 (Prior Health Sciences Library); precision unverified.
     coordinates: { lat: 39.9947751, lng: -83.017086 },
     reservable: true,
     reservationUrl: 'https://hsl-osu.libcal.com/spaces?lid=694&gid=24674',
@@ -63,6 +67,7 @@ export const CAMPUS_LOCATIONS: readonly CampusLocationDetails[] = [
     name: 'FAES Library & Student Success Center',
     category: 'library',
     address: '2120 Fyffe Road (Agricultural Administration Building, room 045), Columbus, OH 43210',
+    // OSM way 160500615 (Agricultural Administration Building); precision unverified.
     coordinates: { lat: 40.0054711, lng: -83.0270647 },
     reservable: true,
     reservationUrl: 'https://libraryroombooking.cloud.osu.edu/',
@@ -75,11 +80,12 @@ export const CAMPUS_LOCATIONS: readonly CampusLocationDetails[] = [
     name: 'Ohio Union',
     category: 'student-center',
     address: '1739 N. High Street, Columbus, OH 43210',
+    // OSM way 154204619 (Ohio Union); precision unverified.
     coordinates: { lat: 39.9976645, lng: -83.0085472 },
     reservable: false,
     infoUrl: 'https://ohiounion.osu.edu/visiting/hours',
     notes:
-      'Central student union with dining and open seating. Its listed rooms are event spaces rented through Student Life Event Services — there are no bookable individual study rooms.',
+      'Central student union with dining and open seating. Its listed rooms are event spaces rented through Student Life Event Services; a separate individual study-room booking entry point has not been verified.',
   },
 ];
 

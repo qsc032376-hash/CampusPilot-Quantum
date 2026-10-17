@@ -23,6 +23,10 @@ const EARTH_RADIUS_METERS = 6_371_000;
 /**
  * A study window in campus local time, expressed as minutes after midnight.
  * Example: Tuesday 1:30-3:00 p.m. -> { day: 'Tue', startMinutes: 810, endMinutes: 900 }.
+ *
+ * The window must start and end on the same calendar day. Cross-midnight
+ * blocks are not supported; "overnight" means early-morning hours on the
+ * stated day (for example 02:00-04:00), not a window spanning two dates.
  */
 export interface StudyBlockWindow {
   day: DayOfWeek;
@@ -130,11 +134,12 @@ export function isLocationOpen(
 
 /**
  * Rough walking time between two points. Straight-line distance, padded for
- * streets, at a calm pace. Good enough to rank; not a route or a promise.
+ * streets, at a calm pace. Identical points return 0 minutes; any positive
+ * distance rounds up to at least 1. Good enough to rank; not a route.
  */
 export function estimateWalkMinutes(from: GeoPoint, to: GeoPoint): number {
   const metres = haversineMeters(from, to) * STREET_ROUTE_FACTOR;
-  return Math.max(1, Math.ceil(metres / WALKING_SPEED_METERS_PER_MINUTE));
+  return Math.ceil(metres / WALKING_SPEED_METERS_PER_MINUTE);
 }
 
 /** Format minutes after midnight as a 12-hour clock time. 540 -> "9:00 AM". */
