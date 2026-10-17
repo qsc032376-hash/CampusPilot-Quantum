@@ -1,0 +1,29 @@
+* { box-sizing: border-box; }
+:root { font-family: system-ui, sans-serif; color: #24292b; background: #f5f4ef; font-synthesis: none; }
+body { margin: 0; }
+main { max-width: 1120px; margin: auto; padding: 28px; }
+header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid #d8d9d3; padding-bottom: 24px; font-size: 13px; }
+.brand { color: #a51d2d; font-weight: 800; letter-spacing: .1em; }
+.intro { padding: 54px 0 30px; max-width: 720px; }
+.eyebrow { font-size: 11px; letter-spacing: .16em; font-weight: 800; color: #8f1c2a; }
+h1 { font-size: clamp(34px, 5vw, 56px); letter-spacing: -.045em; line-height: 1.08; margin: 18px 0; }
+p { line-height: 1.6; color: #535c5d; }
+button { background: #a51d2d; color: white; border: 0; border-radius: 8px; padding: 16px 20px; font: inherit; font-weight: 650; cursor: pointer; margin-top: 10px; }
+button:hover { background: #821524; }
+button:focus-visible { outline: 3px solid #24292b; outline-offset: 4px; }
+button span { margin-left: 16px; }
+.note, footer { font-size: 12px; }
+.columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.panel { background: #fff; border: 1px solid #dedfd8; padding: 26px; border-radius: 12px; }
+h2 { font-size: 22px; letter-spacing: -.025em; }
+h3 { font-size: 15px; margin-top: 26px; }
+.row { padding: 12px 0; border-bottom: 1px solid #ededE7; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.row span { color: #62696b; font-size: 12px; }
+.block { border-left: 3px solid #a51d2d; background: #f8f6f3; padding: 12px 16px; margin-top: 16px; border-radius: 0 6px 6px 0; }
+.block h3, .block p { margin: 4px 0; }
+.block p { font-size: 13px; }
+.slot { color: #8f1c2a; font-weight: 700; }
+.unscheduled { margin-top: 24px; border-top: 1px solid #ddd; }
+.unscheduled p { font-size: 13px; }
+footer { margin: 26px 0; color: #62696b; }
+@media (max-width: 720px) { .columns { grid-template-columns: 1fr; } main { padding: 20px; } .intro { padding-top: 32px; } header { flex-wrap: wrap; } }

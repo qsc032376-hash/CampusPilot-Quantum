@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+Thumbs.db
+
+# Environment files and machine-specific secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+secrets/
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
