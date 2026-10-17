@@ -173,7 +173,7 @@ function buildRecommendation(
     score += 20;
     reasons.push('Official study-room booking is available.');
   } else {
-    reasons.push('Walk-in space; no advance study-room booking.');
+    reasons.push('Individual study-room booking has not been verified.');
   }
 
   if (walkMinutes !== null) {

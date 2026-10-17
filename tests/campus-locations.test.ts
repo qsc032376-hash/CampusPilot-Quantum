@@ -215,3 +215,25 @@ test('29. identical coordinates return 0 minutes and survive maxWalkMinutes: 0',
   assert.ok(nearby.every((result) => (result.walkMinutes ?? 0) <= 5));
   assert.ok(nearby.every((result) => result.location.id !== 'faes-library'));
 });
+
+test('30. Ohio Union reason says booking is unverified, not unavailable', () => {
+  const results = recommendLocations(mondayMorning);
+  const union = results.find((result) => result.location.id === 'ohio-union');
+  assert.ok(union, 'Ohio Union should be recommended in the Monday window');
+
+  const reason = union.reasons.join(' ');
+  assert.match(reason, /Individual study-room booking has not been verified\./);
+  assert.doesNotMatch(reason, /no advance study-room booking/i);
+  assert.doesNotMatch(reason, /no bookable|cannot be booked|no individual study-room booking/i);
+
+  // Other locations keep their booking reason, and ordering is unchanged.
+  const thompson = results.find((result) => result.location.id === 'thompson-library');
+  assert.ok(thompson?.reasons.includes('Official study-room booking is available.'));
+  assert.deepEqual(results.map((result) => result.location.id), [
+    '18th-avenue-library',
+    'faes-library',
+    'health-sciences-library',
+    'thompson-library',
+    'ohio-union',
+  ]);
+});

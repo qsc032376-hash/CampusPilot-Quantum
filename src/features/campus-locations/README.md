@@ -58,7 +58,7 @@ src/features/campus-locations/
   index.ts                  Public exports
   README.md                 This document
 tests/
-  campus-locations.test.ts  29 node:test checks
+  campus-locations.test.ts  30 node:test checks
 ```
 
 ## Verified locations (2026-10-17)
@@ -227,7 +227,7 @@ From the repository root:
 node --test tests/campus-locations.test.ts
 ```
 
-Expected: **29/29 passing**. The file uses Node's built-in test runner and
+Expected: **30/30 passing**. The file uses Node's built-in test runner and
 assertions, matching `tests/scheduler.test.ts`; no test dependency is added.
 
 Run the existing scheduler suite too, to prove the shared code is untouched:
