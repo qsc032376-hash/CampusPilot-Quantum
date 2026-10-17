@@ -18,6 +18,8 @@ interface WeeklyScheduleProps {
 }
 
 const HOUR_HEIGHT = 56;
+const HIT_PADDING = 6;
+const TINY_HEIGHT = 18;
 
 type BlockKind = 'class' | 'busy' | 'study';
 
@@ -37,9 +39,10 @@ interface TimelineItem {
  * space. Events outside the window are dropped; partially visible events are
  * clipped for drawing only and keep their original data.
  *
- * A block's visible rectangle is always the exact clipped span, so a five
- * minute event stays five minutes tall instead of spilling past the window.
- * Study blocks get a separate, taller click target layered over that rectangle.
+ * A block's box is exactly its visible span: no padding, no minimum height, and
+ * labels live in a separate absolutely positioned layer. Study blocks get a
+ * click target that may grow into empty space, but never beyond the gap to a
+ * neighbouring block, so a click can only ever select the block under it.
  */
 export function WeeklySchedule({ request, result, selectedId, onSelect }: WeeklyScheduleProps) {
   const windowStartMs = Date.parse(request.windowStart);
@@ -75,6 +78,21 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
       return { item, span, top, height };
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  // A click target may grow only into genuinely empty time, so it never covers
+  // a neighbour's visible rectangle.
+  const hitGaps = new Map<string, { up: number; down: number }>();
+  const ordered = [...blocks].sort((a, b) => a.top - b.top);
+  ordered.forEach((entry, index) => {
+    const previous = ordered[index - 1];
+    const next = ordered[index + 1];
+    const gapAbove = entry.top - (previous ? previous.top + previous.height : 0);
+    const gapBelow = (next ? next.top : timelineHeight) - (entry.top + entry.height);
+    hitGaps.set(entry.item.id, {
+      up: Math.max(0, Math.min(HIT_PADDING, gapAbove)),
+      down: Math.max(0, Math.min(HIT_PADDING, gapBelow)),
+    });
+  });
 
   const hasStudyBlocks = (result?.blocks.length ?? 0) > 0;
   const isEmpty = blocks.length === 0 && !result;
@@ -118,9 +136,18 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             const clipped = span.clippedStart || span.clippedEnd;
             const label = `${item.title}, ${timeLabel}${clipped ? ', partly outside the window' : ''}`;
             const clipClass = `${span.clippedStart ? ' is-clipped-start' : ''}${span.clippedEnd ? ' is-clipped-end' : ''}`;
+            const tiny = height < TINY_HEIGHT ? ' is-tiny' : '';
+
+            const content = (
+              <div className="cp-block__inner">
+                <span className="cp-block__time">{timeLabel}</span>
+                <span className="cp-block__title">{item.title}</span>
+              </div>
+            );
 
             if (item.kind === 'study') {
               const isSelected = item.id === selectedId;
+              const gap = hitGaps.get(item.id) ?? { up: 0, down: 0 };
               return (
                 <div
                   key={item.id}
@@ -128,13 +155,13 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
                   style={style}
                   data-block-id={item.id}
                 >
-                  <div className={`cp-block cp-block--study${clipClass}`} aria-hidden="true">
-                    <span className="cp-block__time">{timeLabel}</span>
-                    <span className="cp-block__title">{item.title}</span>
+                  <div className={`cp-block cp-block--study${clipClass}${tiny}`} aria-hidden="true">
+                    {content}
                   </div>
                   <button
                     type="button"
                     className="cp-hit"
+                    style={{ top: `${-gap.up}px`, height: `${height + gap.up + gap.down}px` }}
                     onClick={() => onSelect(isSelected ? null : item.id)}
                     aria-pressed={isSelected}
                     aria-label={label}
@@ -145,9 +172,8 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             }
 
             return (
-              <div key={item.id} className={`cp-block cp-block--${item.kind}${clipClass}`} style={style} title={label}>
-                <span className="cp-block__time">{timeLabel}</span>
-                <span className="cp-block__title">{item.title}</span>
+              <div key={item.id} className={`cp-block cp-block--${item.kind}${clipClass}${tiny}`} style={style} title={label}>
+                {content}
               </div>
             );
           })}
