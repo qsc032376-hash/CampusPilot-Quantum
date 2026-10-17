@@ -36,6 +36,8 @@ const fixture = `
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { WeeklySchedule } from './src/ui/components/WeeklySchedule.tsx';
+import { Dashboard } from './src/ui/Dashboard.tsx';
+import { sampleRequest } from './src/sample.ts';
 import './src/style.css';
 import './src/ui/ui.css';
 
@@ -59,10 +61,15 @@ const result = {
 function Fixture() {
   const [selected, setSelected] = useState(null);
   return (
-    <div className="cp-app">
-      <WeeklySchedule request={request} result={result} selectedId={selected} onSelect={setSelected} />
-      <p id="selected">{selected ?? 'none'}</p>
-    </div>
+    <>
+      <div className="cp-app" id="layout">
+        <WeeklySchedule request={request} result={result} selectedId={selected} onSelect={setSelected} />
+        <p id="selected">{selected ?? 'none'}</p>
+      </div>
+      <div id="app">
+        <Dashboard request={sampleRequest} />
+      </div>
+    </>
   );
 }
 createRoot(document.getElementById('root')).render(<Fixture />);
@@ -167,19 +174,18 @@ async function main() {
     await send('Runtime.enable');
 
     for (let attempt = 0; attempt < 40; attempt += 1) {
-      if (await evaluate("document.querySelectorAll('.cp-slot').length === 2")) break;
+      if (await evaluate("document.querySelectorAll('#layout .cp-slot').length === 2 && !!document.querySelector('#app .cp-schedule')")) break;
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
-    await evaluate("document.querySelector('.cp-schedule').scrollIntoView({block:'start'})");
+    await evaluate("document.querySelector('#layout .cp-schedule').scrollIntoView({block:'start'})");
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     const geometry = await evaluate(`(() => {
       const rect = (el) => { const r = el.getBoundingClientRect(); return { top: r.top, height: r.height, bottom: r.bottom, left: r.left, width: r.width }; };
-      const track = rect(document.querySelector('.cp-timeline__track'));
-      const blocks = [...document.querySelectorAll('.cp-timeline__track .cp-block')].map((el) => ({ cls: el.className, ...rect(el) }));
-      const slots = [...document.querySelectorAll('.cp-slot')].map((el) => ({ cls: el.className, ...rect(el) }));
-      const hits = [...document.querySelectorAll('.cp-hit')].map((el) => ({ label: el.getAttribute('aria-label'), ...rect(el) }));
-      return { track, blocks, slots, hits };
+      const track = rect(document.querySelector('#layout .cp-timeline__track'));
+      const blocks = [...document.querySelectorAll('#layout .cp-timeline__track .cp-block')].map((el) => ({ cls: el.className, ...rect(el) }));
+      const slots = [...document.querySelectorAll('#layout .cp-slot')].map((el) => ({ cls: el.className, ...rect(el) }));
+      return { track, blocks, slots };
     })()`);
 
     const expected = (5 / 60) * 56;
@@ -223,6 +229,54 @@ async function main() {
 
     const third = await clickAt(aCenter.x, aCenter.y);
     record('clicking A again selects A', third === 'A', `selected=${third}`);
+
+    // Shared contract integration, rendered by the real Dashboard.
+    await evaluate("document.querySelector('#app .cp-schedule').scrollIntoView({block:'start'})");
+    await evaluate(
+      "[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Build my day')).click()",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const appText = await evaluate("document.querySelector('#app').innerText");
+    record(
+      'conflicts section lists both events with the overlap',
+      appText.includes('Math lecture') && appText.includes('Advising slot') && appText.includes('30 min overlap'),
+      '',
+    );
+    record(
+      'conflicting blocks are marked in the timeline',
+      (await evaluate("document.querySelectorAll('#app .cp-block.is-conflict').length")) === 2,
+      `count=${await evaluate("document.querySelectorAll('#app .cp-block.is-conflict').length")}`,
+    );
+    record(
+      'conflict badge is really rendered with size',
+      await evaluate(`(() => {
+        const badge = document.querySelector('#app .cp-badge');
+        if (!badge) return false;
+        const box = badge.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      })()`),
+      '',
+    );
+    record(
+      'conflict legend row is visible',
+      await evaluate("!!document.querySelector('#app .cp-dot--conflict')"),
+      '',
+    );
+    record(
+      'task form exposes optional priority and course code',
+      appText.includes('Priority (optional)') && appText.includes('Course code (optional)'),
+      '',
+    );
+
+    await evaluate("document.querySelector('#app .cp-session').click()");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const locationText = await evaluate("document.querySelector('#app').innerText");
+    record(
+      'location card falls back when optional fields are absent',
+      locationText.includes('Thompson Library') && locationText.includes('No building or room details supplied'),
+      '',
+    );
   } finally {
     if (socket) socket.close();
     chrome.kill();

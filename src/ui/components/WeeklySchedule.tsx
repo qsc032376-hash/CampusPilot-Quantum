@@ -97,6 +97,15 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
   const hasStudyBlocks = (result?.blocks.length ?? 0) > 0;
   const isEmpty = blocks.length === 0 && !result;
 
+  // Conflicts come from the shared scheduler response; this component only
+  // decorates the events involved and never recomputes overlaps itself.
+  const conflicts = result?.conflicts ?? [];
+  const conflictIds = new Set<string>();
+  for (const conflict of conflicts) {
+    conflictIds.add(conflict.firstId);
+    conflictIds.add(conflict.secondId);
+  }
+
   return (
     <section className="cp-panel cp-schedule" aria-labelledby="cp-schedule-heading">
       <div className="cp-panel__head">
@@ -114,6 +123,11 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
         <li className="cp-legend__item">
           <span className="cp-dot cp-dot--study" aria-hidden="true" /> Study block
         </li>
+        {conflicts.length > 0 && (
+          <li className="cp-legend__item">
+            <span className="cp-dot cp-dot--conflict" aria-hidden="true" /> Conflict
+          </li>
+        )}
       </ul>
 
       <div className="cp-timeline" style={{ height: `${timelineHeight}px` }}>
@@ -134,9 +148,16 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             const style = { top: `${top}px`, height: `${height}px` };
             const timeLabel = formatRangeDetailed(item.start, item.end, showZone);
             const clipped = span.clippedStart || span.clippedEnd;
-            const label = `${item.title}, ${timeLabel}${clipped ? ', partly outside the window' : ''}`;
+            const isConflict = conflictIds.has(item.id);
+            const label = `${item.title}, ${timeLabel}${clipped ? ', partly outside the window' : ''}${isConflict ? ', conflicting event' : ''}`;
             const clipClass = `${span.clippedStart ? ' is-clipped-start' : ''}${span.clippedEnd ? ' is-clipped-end' : ''}`;
             const tiny = height < TINY_HEIGHT ? ' is-tiny' : '';
+            const conflictClass = isConflict ? ' is-conflict' : '';
+            const badge = isConflict ? (
+              <span className="cp-badge" aria-hidden="true">
+                !
+              </span>
+            ) : null;
 
             const content = (
               <div className="cp-block__inner">
@@ -155,8 +176,9 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
                   style={style}
                   data-block-id={item.id}
                 >
-                  <div className={`cp-block cp-block--study${clipClass}${tiny}`} aria-hidden="true">
+                  <div className={`cp-block cp-block--study${clipClass}${tiny}${conflictClass}`} aria-hidden="true">
                     {content}
+                    {badge}
                   </div>
                   <button
                     type="button"
@@ -172,8 +194,9 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             }
 
             return (
-              <div key={item.id} className={`cp-block cp-block--${item.kind}${clipClass}${tiny}`} style={style} title={label}>
+              <div key={item.id} className={`cp-block cp-block--${item.kind}${clipClass}${tiny}${conflictClass}`} style={style} title={label}>
                 {content}
+                {badge}
               </div>
             );
           })}
@@ -191,6 +214,8 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
         {hasStudyBlocks
           ? 'Study blocks are suggestions. Select one to see its location.'
           : 'Study blocks appear here once the schedule is built.'}
+        {conflicts.length > 0 &&
+          ` ${conflicts.length} conflicting ${conflicts.length === 1 ? 'pair' : 'pairs'} reported by the scheduler.`}
         {totalMinutes > 0 && ` Visible window: ${Math.round(totalMinutes / 60)} hours.`}
       </p>
     </section>

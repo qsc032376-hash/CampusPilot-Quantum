@@ -2,7 +2,13 @@ import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ScheduleRequest } from '../../types.ts';
 import { CAMPUS_TIME_ZONE, formatDateTimeWithZone, isoToCampusInput, parseCampusInput } from '../format.ts';
-import { MAX_DURATION_MINUTES, MAX_TITLE_LENGTH, resolveTaskInput } from '../taskValidation.ts';
+import {
+  MAX_COURSE_CODE_LENGTH,
+  MAX_DURATION_MINUTES,
+  MAX_TITLE_LENGTH,
+  PRIORITY_VALUES,
+  resolveTaskInput,
+} from '../taskValidation.ts';
 import type { PendingChoice, TaskDraft } from '../taskValidation.ts';
 
 export type { TaskDraft } from '../taskValidation.ts';
@@ -26,6 +32,8 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
   const [duration, setDuration] = useState('60');
   const [due, setDue] = useState(() => isoToCampusInput(request.windowEnd));
   const [choice, setChoice] = useState<PendingChoice | null>(null);
+  const [priority, setPriority] = useState('');
+  const [courseCode, setCourseCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const fieldId = useId();
 
@@ -47,6 +55,8 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
       due,
       choice,
       windowStart: request.windowStart,
+      priority,
+      courseCode,
     });
 
     if (!result.ok) {
@@ -57,6 +67,7 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
     setError(null);
     onAdd(result.draft);
     setTitle('');
+    setCourseCode('');
     setChoice(null);
   }
 
@@ -102,6 +113,32 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
               value={due}
               onChange={(event) => handleDueChange(event.target.value)}
             />
+          </label>
+        </div>
+
+        <div className="cp-field-row cp-field-row--split">
+          <label className="cp-field">
+            <span className="cp-field__label">Course code (optional)</span>
+            <input
+              className="cp-input"
+              value={courseCode}
+              onChange={(event) => setCourseCode(event.target.value)}
+              placeholder="CSE 201"
+              maxLength={MAX_COURSE_CODE_LENGTH}
+              autoComplete="off"
+            />
+          </label>
+
+          <label className="cp-field">
+            <span className="cp-field__label">Priority (optional)</span>
+            <select className="cp-input" value={priority} onChange={(event) => setPriority(event.target.value)}>
+              <option value="">None</option>
+              {PRIORITY_VALUES.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -155,6 +192,8 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
               <span className="cp-tasks__title">{task.title}</span>
               <span className="cp-tasks__meta">
                 {task.durationMinutes} min · due {formatDateTimeWithZone(task.dueAt)}
+                {task.courseCode && <span className="cp-tag">{task.courseCode}</span>}
+                {task.priority && <span className={`cp-tag cp-tag--${task.priority}`}>{task.priority}</span>}
               </span>
               <button
                 type="button"
