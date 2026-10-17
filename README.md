@@ -40,6 +40,9 @@ Open the Local URL printed by Vite, usually http://127.0.0.1:5173. If that port 
 
 ```sh
 npm test
+node --test tests/scheduler.test.ts tests/ui-format.test.ts tests/campus-locations.test.ts
+node tests/render-check.mjs
+node tests/browser-check.mjs
 npm run build
 npm run preview
 ```
@@ -49,22 +52,37 @@ npm run preview
 Manual smoke test:
 
 1. Start `npm run dev` and open its URL.
-2. Click **Generate sample schedule**.
-3. Expect three sessions on October 19, 2026, in Columbus time: calculus at 9:00 AM, writing at 11:00 AM, and CSE at 3:00 PM. Extended reading should appear under **Needs another time**.
-4. Click again: the output should be identical. Reload: the initial empty state returns.
-5. Check a narrow browser window: the two panels stack vertically. Tab to the button and activate it with Enter.
+2. Click **Build my day**.
+3. Expect three sessions on October 19, 2026, in Columbus time: calculus at 11:00 AM, writing at 1:00 PM, and CSE at 3:00 PM. Extended reading should appear under **Needs another time**.
+4. Click **Rebuild my day**: the output should be identical. Reset restores the sample and clears the form and plan.
+5. The 07:00-08:00 early class is outside the window and hidden. The 08:00-10:00 morning class is drawn only from 09:00, with a clipped-start marker.
+6. Advising (14:30-15:00) overlaps Math (14:00-15:00). The response reports 30 minutes; conflict highlighting is a follow-up UI change, not yet displayed by this PR.
+7. Check a narrow browser window and keyboard navigation.
 
 ## Shared contracts and implementation
 
-- `src/types.ts`: ClassEvent, StudyTask, UnavailablePeriod, StudyBlock, CampusLocation, ScheduleRequest, ScheduleResponse.
+- `src/types.ts`: ClassEvent, StudyTask, UnavailablePeriod, StudyBlock, CampusLocation, ScheduleRequest, ScheduleResponse, ScheduleConflict.
 - `src/scheduler.ts`: pure `generateMockSchedule(request)` function.
 - `src/sample.ts`: fixed demonstration request.
 - `src/main.tsx`: sample page and result display.
 - `tests/scheduler.test.ts`: repeatability, conflict, deadline, capacity and validation checks.
 
-Timestamps must be ISO 8601 with an explicit offset or Z. Output timestamps use UTC; the UI always displays America/New_York, independent of the developer's computer timezone. Durations are positive integer minutes. Task IDs must be unique.
+Timestamps must be ISO 8601 with an explicit offset or Z. Output timestamps use UTC; the UI always displays America/New_York, independent of the developer's computer timezone. Durations are positive integer minutes. Task IDs must be unique. IDs across classes, unavailable periods and returned study blocks must also be unique so conflict references are unambiguous. Generated study block IDs remain `study-${task.id}`; avoid using those IDs for other events. Duplicate event IDs throw an Error.
 
 The mock processes tasks by earliest deadline, then task ID, and places each entire task into its earliest free gap inside one supplied window. Classes, unavailable periods and previously placed study blocks block time. Adjacent intervals may touch. The first supplied location is used; its hours and availability are not verified. Tasks that cannot fit are reported with reasons. It does not split tasks, optimize globally, add travel buffers, or infer overnight availability. Supply a suitable daytime window and unavailable periods. Invalid input throws an Error.
+
+## Optional UI contract (A1)
+
+- `CampusLocation`: optional `building?: string`, `room?: string`, `hours?: string`. These are display metadata, not an availability check. Supply only sourced values; label simulated hours explicitly. This change supplies no invented rooms or hours. C's existing `toScheduleLocations()` still returns only id/name; richer location data needs deliberate UI integration.
+- `StudyTask`: optional `priority?: 'low' | 'medium' | 'high'` and `courseCode?: string`. Neither affects earliest-deadline/ID ordering. Optional fields are not UI capability flags; B should provide optional controls with an empty value rather than infer support from whether sample tasks contain them.
+- `ScheduleResponse.conflicts?: ScheduleConflict[]`: **omitted entirely** when empty (A1), including in JSON. Consumers use `response.conflicts ?? []`. Omission means no detected conflict for responses from this scheduler; older producers may not implement detection.
+- Each conflict has `firstId`, `secondId`, `overlapMinutes`. Resolve IDs against classes, unavailable periods and returned blocks, not task IDs. Each unordered pair appears once, with IDs and pairs sorted lexically, independent of input order.
+- Scan runs after placement and does not reschedule anything. Only positive overlap inside `[windowStart, windowEnd)` counts. Boundary-touching and wholly outside overlaps are excluded. Minutes use actual timestamps (including DST), may be fractional and are not rounded. Original event intervals are not mutated.
+- Unscheduled tasks remain separate: a task that cannot fit is not itself a conflicting event. Successfully placed blocks cannot overlap existing busy time under the current algorithm.
+
+B's UI work should start from updated main **after this foundation PR merges**, on `feature/ui-contracts`. It should consume the shared conflicts rather than duplicate detection. This PR does not change UI files.
+
+The browser test currently locates Chrome/Edge on Windows and uses ports 4180/9223. macOS browser verification remains a separate D task. GitHub having no Checks is not a successful CI run.
 
 ## Team workflow
 
