@@ -18,7 +18,6 @@ interface WeeklyScheduleProps {
 }
 
 const HOUR_HEIGHT = 56;
-const MIN_BLOCK_HEIGHT = 26;
 
 type BlockKind = 'class' | 'busy' | 'study';
 
@@ -37,6 +36,10 @@ interface TimelineItem {
  * negative across a fall-back hour and the repeated hour occupies its own
  * space. Events outside the window are dropped; partially visible events are
  * clipped for drawing only and keep their original data.
+ *
+ * A block's visible rectangle is always the exact clipped span, so a five
+ * minute event stays five minutes tall instead of spilling past the window.
+ * Study blocks get a separate, taller click target layered over that rectangle.
  */
 export function WeeklySchedule({ request, result, selectedId, onSelect }: WeeklyScheduleProps) {
   const windowStartMs = Date.parse(request.windowStart);
@@ -63,12 +66,18 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
     previousDay = day;
   }
 
-  const visibleItems = items
-    .map((item) => ({ item, span: clipToWindow(item.start, item.end, request.windowStart, request.windowEnd) }))
-    .filter((entry): entry is { item: TimelineItem; span: NonNullable<ReturnType<typeof clipToWindow>> } => entry.span !== null);
+  const blocks = items
+    .map((item) => {
+      const span = clipToWindow(item.start, item.end, request.windowStart, request.windowEnd);
+      if (!span) return null;
+      const top = Math.min(Math.max(0, (span.offsetMinutes / 60) * HOUR_HEIGHT), timelineHeight);
+      const height = Math.max(0, Math.min((span.durationMinutes / 60) * HOUR_HEIGHT, timelineHeight - top));
+      return { item, span, top, height };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   const hasStudyBlocks = (result?.blocks.length ?? 0) > 0;
-  const isEmpty = visibleItems.length === 0 && !result;
+  const isEmpty = blocks.length === 0 && !result;
 
   return (
     <section className="cp-panel cp-schedule" aria-labelledby="cp-schedule-heading">
@@ -103,9 +112,7 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             <span key={tick.offset} className="cp-timeline__line" style={{ top: `${(tick.offset / 60) * HOUR_HEIGHT}px` }} aria-hidden="true" />
           ))}
 
-          {visibleItems.map(({ item, span }) => {
-            const top = (span.offsetMinutes / 60) * HOUR_HEIGHT;
-            const height = Math.max(MIN_BLOCK_HEIGHT, (span.durationMinutes / 60) * HOUR_HEIGHT);
+          {blocks.map(({ item, span, top, height }) => {
             const style = { top: `${top}px`, height: `${height}px` };
             const timeLabel = formatRangeDetailed(item.start, item.end, showZone);
             const clipped = span.clippedStart || span.clippedEnd;
@@ -115,19 +122,25 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             if (item.kind === 'study') {
               const isSelected = item.id === selectedId;
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  className={`cp-block cp-block--study${clipClass}${isSelected ? ' is-selected' : ''}`}
+                  className={`cp-slot${isSelected ? ' is-selected' : ''}`}
                   style={style}
-                  onClick={() => onSelect(isSelected ? null : item.id)}
-                  aria-pressed={isSelected}
-                  aria-label={label}
-                  title={clipped ? `${timeLabel} (partly outside the window)` : timeLabel}
+                  data-block-id={item.id}
                 >
-                  <span className="cp-block__time">{timeLabel}</span>
-                  <span className="cp-block__title">{item.title}</span>
-                </button>
+                  <div className={`cp-block cp-block--study${clipClass}`} aria-hidden="true">
+                    <span className="cp-block__time">{timeLabel}</span>
+                    <span className="cp-block__title">{item.title}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="cp-hit"
+                    onClick={() => onSelect(isSelected ? null : item.id)}
+                    aria-pressed={isSelected}
+                    aria-label={label}
+                    title={clipped ? `${timeLabel} (partly outside the window)` : timeLabel}
+                  />
+                </div>
               );
             }
 

@@ -1,5 +1,5 @@
 import type { ScheduleRequest, StudyBlock } from '../../types.ts';
-import { formatClock, formatDateTime, formatDuration } from '../format.ts';
+import { formatDayShort, formatDuration, formatRangeDetailed } from '../format.ts';
 import { EmptyState } from './EmptyState.tsx';
 interface LocationCardProps {
   block: StudyBlock | null;
@@ -31,7 +31,7 @@ export function LocationCard({ block, request }: LocationCardProps) {
       <div className="cp-panel__head">
         <h2 id="cp-location-heading-detail">Where</h2>
         <p className="cp-panel__meta">
-          {formatDateTime(block.start)} – {formatClock(block.end)}
+          {formatDayShort(block.start)} · {formatRangeDetailed(block.start, block.end, true)}
         </p>
       </div>
 

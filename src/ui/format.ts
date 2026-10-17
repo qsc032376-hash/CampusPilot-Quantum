@@ -140,6 +140,17 @@ export function parseCampusInput(value: string): CampusInputResult {
   const wall = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
   if (!Number.isFinite(wall)) return { status: 'invalid', message: 'Enter a valid date and time.' };
 
+  // Date.UTC silently rolls invalid dates forward (Feb 30 becomes Mar 2), so the
+  // parsed date has to round-trip before it can be trusted.
+  const wallDate = new Date(wall);
+  if (
+    wallDate.getUTCFullYear() !== Number(year) ||
+    wallDate.getUTCMonth() !== Number(month) - 1 ||
+    wallDate.getUTCDate() !== Number(day)
+  ) {
+    return { status: 'invalid', message: `${year}-${month}-${day} is not a real calendar date.` };
+  }
+
   // Offsets in force before, at, and after the wall time cover both transitions.
   const offsets = new Set<number>([offsetAt(wall - 86_400_000), offsetAt(wall), offsetAt(wall + 86_400_000)]);
   const candidates: number[] = [];
@@ -266,15 +277,27 @@ export function formatRangeDetailed(startIso: string, endIso: string, withZone: 
     : `${formatClock(startIso)} ${startZone} – ${formatClock(endIso)} ${endZone}`;
 }
 
-/** Window label that always shows both dates when the window crosses midnight. */
+/** "Oct 19, 2026, 5:00 PM EDT" — date, time and the zone actually in force. */
+export function formatDateTimeWithZone(iso: string): string {
+  return `${formatDateTime(iso)} ${abbreviationAt(Date.parse(iso))}`;
+}
+
+/** Window label that keeps the correct zone at each end, including a transition. */
 export function formatWindowLabel(windowStartIso: string, windowEndIso: string): string {
   const startDay = formatDayShort(windowStartIso);
   const endDay = formatDayShort(windowEndIso);
-  const zone = abbreviationAt(Date.parse(windowStartIso));
+  const startZone = abbreviationAt(Date.parse(windowStartIso));
+  const endZone = abbreviationAt(Date.parse(windowEndIso));
+  const sameZone = startZone === endZone;
+
   if (startDay === endDay) {
-    return `${formatDay(windowStartIso)} · ${formatClock(windowStartIso)} – ${formatClock(windowEndIso)} ${zone}`;
+    return sameZone
+      ? `${formatDay(windowStartIso)} · ${formatClock(windowStartIso)} – ${formatClock(windowEndIso)} ${startZone}`
+      : `${formatDay(windowStartIso)} · ${formatClock(windowStartIso)} ${startZone} – ${formatClock(windowEndIso)} ${endZone}`;
   }
-  return `${startDay} ${formatClock(windowStartIso)} – ${endDay} ${formatClock(windowEndIso)}`;
+  return sameZone
+    ? `${startDay} ${formatClock(windowStartIso)} – ${endDay} ${formatClock(windowEndIso)} ${startZone}`
+    : `${startDay} ${formatClock(windowStartIso)} ${startZone} – ${endDay} ${formatClock(windowEndIso)} ${endZone}`;
 }
 
 export function formatDuration(minutes: number): string {

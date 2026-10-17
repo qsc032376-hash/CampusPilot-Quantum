@@ -1,5 +1,5 @@
 import type { ScheduleRequest, ScheduleResponse } from '../../types.ts';
-import { CAMPUS_TIME_ZONE, formatDayShort, formatDuration, formatRange } from '../format.ts';
+import { CAMPUS_TIME_ZONE, formatDayShort, formatDuration, formatRangeDetailed } from '../format.ts';
 import { EmptyState } from './EmptyState.tsx';
 
 interface ScheduleResultsProps {
@@ -83,7 +83,7 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
                     >
                       <span className="cp-session__time">
                         {dayPrefix}
-                        {formatRange(block.start, block.end)}
+                        {formatRangeDetailed(block.start, block.end, true)}
                       </span>
                       <span className="cp-session__title">{block.title}</span>
                     </button>

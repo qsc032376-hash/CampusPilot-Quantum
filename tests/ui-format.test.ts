@@ -4,11 +4,14 @@ import {
   clipToWindow,
   elapsedMinutes,
   formatDateTime,
+  formatDateTimeWithZone,
+  formatRangeDetailed,
   formatWindowLabel,
   parseCampusInput,
   windowSpansTransition,
 } from '../src/ui/format.ts';
 import { createResetState } from '../src/ui/dashboardReset.ts';
+import { resolveTaskInput } from '../src/ui/taskValidation.ts';
 import { sampleRequest } from '../src/sample.ts';
 
 test('spring-forward gap is refused instead of being silently shifted', () => {
@@ -117,4 +120,113 @@ test('reset restores the initial request and forces a clean form remount', () =>
   assert.equal(next.selectedId, null);
   assert.equal(next.formKey, 4);
   assert.notEqual(next.formKey, 3);
+});
+
+test('impossible calendar dates are rejected instead of rolled forward', () => {
+  const result = parseCampusInput('2026-02-30T12:00');
+  assert.equal(result.status, 'invalid');
+  if (result.status === 'invalid') {
+    assert.match(result.message, /not a real calendar date/);
+  }
+  assert.equal(parseCampusInput('2026-02-28T12:00').status, 'ok');
+  assert.equal(parseCampusInput('2026-13-01T12:00').status, 'invalid');
+});
+
+test('a fall-back window labels each end with the zone in force', () => {
+  const label = formatWindowLabel('2026-11-01T00:00:00-04:00', '2026-11-01T04:00:00-05:00');
+  assert.match(label, /12:00 AM EDT/);
+  assert.match(label, /4:00 AM EST/);
+});
+
+test('the two repeated 01:30 deadlines are distinguishable in a task list', () => {
+  const earlier = formatDateTimeWithZone('2026-11-01T05:30:00.000Z');
+  const later = formatDateTimeWithZone('2026-11-01T06:30:00.000Z');
+  assert.notEqual(earlier, later);
+  assert.match(earlier, /EDT/);
+  assert.match(later, /EST/);
+});
+
+test('result rows keep zone meaning instead of naked wall time', () => {
+  const beforeChange = formatRangeDetailed('2026-11-01T05:30:00.000Z', '2026-11-01T06:00:00.000Z', true);
+  const acrossChange = formatRangeDetailed('2026-11-01T05:45:00.000Z', '2026-11-01T06:15:00.000Z', true);
+  const afterChange = formatRangeDetailed('2026-11-01T06:15:00.000Z', '2026-11-01T06:45:00.000Z', true);
+  assert.match(beforeChange, /EDT/);
+  assert.match(afterChange, /EST/);
+  assert.match(acrossChange, /EDT/);
+  assert.match(acrossChange, /EST/);
+});
+
+const ambiguousDue = '2026-11-01T01:30';
+const ambiguousBase = {
+  title: 'Review notes',
+  duration: '60',
+  due: ambiguousDue,
+  windowStart: '2026-11-01T00:00:00-04:00',
+};
+
+test('submitting a repeated hour with no choice fails', () => {
+  const result = resolveTaskInput({ ...ambiguousBase, choice: null });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.message, /happens twice/);
+});
+
+test('choosing EDT or EST succeeds and stores different timestamps', () => {
+  const earlier = resolveTaskInput({
+    ...ambiguousBase,
+    choice: { due: ambiguousDue, iso: '2026-11-01T05:30:00.000Z' },
+  });
+  const later = resolveTaskInput({
+    ...ambiguousBase,
+    choice: { due: ambiguousDue, iso: '2026-11-01T06:30:00.000Z' },
+  });
+
+  assert.equal(earlier.ok, true);
+  assert.equal(later.ok, true);
+  if (earlier.ok && later.ok) {
+    assert.equal(earlier.draft.dueAt, '2026-11-01T05:30:00.000Z');
+    assert.equal(later.draft.dueAt, '2026-11-01T06:30:00.000Z');
+    assert.notEqual(earlier.draft.dueAt, later.draft.dueAt);
+  }
+});
+
+test('a choice made for a previous deadline is never reused', () => {
+  const staleChoice = { due: '2026-11-01T01:45', iso: '2026-11-01T05:45:00.000Z' };
+  const result = resolveTaskInput({ ...ambiguousBase, due: '2026-11-01T01:30', choice: staleChoice });
+  assert.equal(result.ok, false);
+
+  // The same choice is valid again once it matches the current deadline.
+  const matching = resolveTaskInput({ ...ambiguousBase, due: '2026-11-01T01:45', choice: staleChoice });
+  assert.equal(matching.ok, true);
+
+  // An instant that does not belong to this wall time is refused as well.
+  const mismatched = resolveTaskInput({
+    ...ambiguousBase,
+    due: '2026-11-01T01:45',
+    choice: { due: '2026-11-01T01:45', iso: '2026-11-01T05:30:00.000Z' },
+  });
+  assert.equal(mismatched.ok, false);
+});
+
+test('ordinary and spring-gap times still validate as before', () => {
+  const ordinary = resolveTaskInput({
+    title: 'Read',
+    duration: '30',
+    due: '2026-10-19T12:00',
+    choice: null,
+    windowStart: '2026-10-19T09:00:00-04:00',
+  });
+  assert.equal(ordinary.ok, true);
+  if (ordinary.ok) assert.equal(ordinary.draft.dueAt, '2026-10-19T16:00:00.000Z');
+
+  const gap = resolveTaskInput({
+    title: 'Read',
+    duration: '30',
+    due: '2027-03-14T02:30',
+    choice: null,
+    windowStart: '2027-03-14T01:00:00-05:00',
+  });
+  assert.equal(gap.ok, false);
+
+  const emptyTitle = resolveTaskInput({ ...ambiguousBase, title: '   ', choice: null });
+  assert.equal(emptyTitle.ok, false);
 });
