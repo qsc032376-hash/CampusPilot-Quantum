@@ -1,5 +1,14 @@
 import type { ScheduleRequest, ScheduleResponse } from '../../types.ts';
-import { formatClock, formatDay, formatMinuteOfDay, formatRange, minuteOfDay, minutesFromWindowStart } from '../format.ts';
+import {
+  abbreviationAt,
+  clipToWindow,
+  elapsedMinutes,
+  formatClock,
+  formatDayShort,
+  formatRangeDetailed,
+  formatWindowLabel,
+  windowSpansTransition,
+} from '../format.ts';
 
 interface WeeklyScheduleProps {
   request: ScheduleRequest;
@@ -22,14 +31,19 @@ interface TimelineItem {
 }
 
 /**
- * The visual hero: a day timeline built from the request window. Fixed classes
- * and unavailable periods come from the request; study blocks come from the
- * scheduler's response. This component only positions what it is given.
+ * The visual hero: a timeline built from the request window.
+ *
+ * Positions come from real timestamp differences, so elapsed time is never
+ * negative across a fall-back hour and the repeated hour occupies its own
+ * space. Events outside the window are dropped; partially visible events are
+ * clipped for drawing only and keep their original data.
  */
 export function WeeklySchedule({ request, result, selectedId, onSelect }: WeeklyScheduleProps) {
-  const totalMinutes = minutesFromWindowStart(request.windowEnd, request.windowStart);
+  const windowStartMs = Date.parse(request.windowStart);
+  const totalMinutes = elapsedMinutes(request.windowEnd, request.windowStart);
   const timelineHeight = Math.max(HOUR_HEIGHT, (totalMinutes / 60) * HOUR_HEIGHT);
-  const windowStartMinute = minuteOfDay(request.windowStart);
+  const showZone = windowSpansTransition(request.windowStart, request.windowEnd);
+  const crossDay = formatDayShort(request.windowStart) !== formatDayShort(request.windowEnd);
 
   const items: TimelineItem[] = [
     ...request.classes.map((event) => ({ id: event.id, title: event.title, kind: 'class' as const, start: event.start, end: event.end })),
@@ -37,19 +51,30 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
     ...(result?.blocks ?? []).map((block) => ({ id: block.id, title: block.title, kind: 'study' as const, start: block.start, end: block.end })),
   ];
 
-  const ticks: number[] = [];
-  for (let offset = 0; offset <= totalMinutes; offset += 60) ticks.push(offset);
+  const ticks: { offset: number; label: string }[] = [];
+  let previousDay = '';
+  for (let offset = 0; offset <= totalMinutes; offset += 60) {
+    const instant = new Date(windowStartMs + offset * 60_000).toISOString();
+    const day = formatDayShort(instant);
+    const label = [crossDay && day !== previousDay ? day : '', formatClock(instant), showZone ? abbreviationAt(Date.parse(instant)) : '']
+      .filter(Boolean)
+      .join(' ');
+    ticks.push({ offset, label });
+    previousDay = day;
+  }
+
+  const visibleItems = items
+    .map((item) => ({ item, span: clipToWindow(item.start, item.end, request.windowStart, request.windowEnd) }))
+    .filter((entry): entry is { item: TimelineItem; span: NonNullable<ReturnType<typeof clipToWindow>> } => entry.span !== null);
 
   const hasStudyBlocks = (result?.blocks.length ?? 0) > 0;
-  const isEmpty = items.length === 0 && !result;
+  const isEmpty = visibleItems.length === 0 && !result;
 
   return (
     <section className="cp-panel cp-schedule" aria-labelledby="cp-schedule-heading">
       <div className="cp-panel__head">
-        <h2 id="cp-schedule-heading">Your day</h2>
-        <p className="cp-panel__meta">
-          {formatDay(request.windowStart)} · {formatRange(request.windowStart, request.windowEnd)}
-        </p>
+        <h2 id="cp-schedule-heading">Your schedule</h2>
+        <p className="cp-panel__meta">{formatWindowLabel(request.windowStart, request.windowEnd)}</p>
       </div>
 
       <ul className="cp-legend">
@@ -66,27 +91,26 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
 
       <div className="cp-timeline" style={{ height: `${timelineHeight}px` }}>
         <div className="cp-timeline__gutter" aria-hidden="true">
-          {ticks.map((offset) => (
-            <span key={offset} className="cp-timeline__tick" style={{ top: `${(offset / 60) * HOUR_HEIGHT}px` }}>
-              {formatMinuteOfDay(windowStartMinute + offset)}
+          {ticks.map((tick) => (
+            <span key={tick.offset} className="cp-timeline__tick" style={{ top: `${(tick.offset / 60) * HOUR_HEIGHT}px` }}>
+              {tick.label}
             </span>
           ))}
         </div>
 
         <div className="cp-timeline__track">
-          {ticks.map((offset) => (
-            <span key={offset} className="cp-timeline__line" style={{ top: `${(offset / 60) * HOUR_HEIGHT}px` }} aria-hidden="true" />
+          {ticks.map((tick) => (
+            <span key={tick.offset} className="cp-timeline__line" style={{ top: `${(tick.offset / 60) * HOUR_HEIGHT}px` }} aria-hidden="true" />
           ))}
 
-          {items.map((item) => {
-            const startOffset = minutesFromWindowStart(item.start, request.windowStart);
-            const endOffset = minutesFromWindowStart(item.end, request.windowStart);
-            const rawTop = (startOffset / 60) * HOUR_HEIGHT;
-            const top = Math.min(Math.max(0, rawTop), Math.max(0, timelineHeight - MIN_BLOCK_HEIGHT));
-            const rawHeight = ((endOffset - startOffset) / 60) * HOUR_HEIGHT;
-            const height = Math.max(MIN_BLOCK_HEIGHT, Math.min(rawHeight, timelineHeight - top));
+          {visibleItems.map(({ item, span }) => {
+            const top = (span.offsetMinutes / 60) * HOUR_HEIGHT;
+            const height = Math.max(MIN_BLOCK_HEIGHT, (span.durationMinutes / 60) * HOUR_HEIGHT);
             const style = { top: `${top}px`, height: `${height}px` };
-            const label = `${item.title}, ${formatRange(item.start, item.end)}`;
+            const timeLabel = formatRangeDetailed(item.start, item.end, showZone);
+            const clipped = span.clippedStart || span.clippedEnd;
+            const label = `${item.title}, ${timeLabel}${clipped ? ', partly outside the window' : ''}`;
+            const clipClass = `${span.clippedStart ? ' is-clipped-start' : ''}${span.clippedEnd ? ' is-clipped-end' : ''}`;
 
             if (item.kind === 'study') {
               const isSelected = item.id === selectedId;
@@ -94,21 +118,22 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
                 <button
                   key={item.id}
                   type="button"
-                  className={`cp-block cp-block--study${isSelected ? ' is-selected' : ''}`}
+                  className={`cp-block cp-block--study${clipClass}${isSelected ? ' is-selected' : ''}`}
                   style={style}
                   onClick={() => onSelect(isSelected ? null : item.id)}
                   aria-pressed={isSelected}
                   aria-label={label}
+                  title={clipped ? `${timeLabel} (partly outside the window)` : timeLabel}
                 >
-                  <span className="cp-block__time">{formatRange(item.start, item.end)}</span>
+                  <span className="cp-block__time">{timeLabel}</span>
                   <span className="cp-block__title">{item.title}</span>
                 </button>
               );
             }
 
             return (
-              <div key={item.id} className={`cp-block cp-block--${item.kind}`} style={style} title={label}>
-                <span className="cp-block__time">{formatRange(item.start, item.end)}</span>
+              <div key={item.id} className={`cp-block cp-block--${item.kind}${clipClass}`} style={style} title={label}>
+                <span className="cp-block__time">{timeLabel}</span>
                 <span className="cp-block__title">{item.title}</span>
               </div>
             );
@@ -117,7 +142,7 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
           {isEmpty && (
             <div className="cp-timeline__empty">
               <p className="cp-empty__title">Nothing scheduled yet</p>
-              <p className="cp-empty__message">Add a study task, then build the day.</p>
+              <p className="cp-empty__message">Add a study task, then build the schedule.</p>
             </div>
           )}
         </div>
@@ -125,8 +150,9 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
 
       <p className="cp-panel__foot">
         {hasStudyBlocks
-          ? 'Study blocks are suggestions. Tap one to see its location.'
+          ? 'Study blocks are suggestions. Select one to see its location.'
           : 'Study blocks appear here once the schedule is built.'}
+        {totalMinutes > 0 && ` Visible window: ${Math.round(totalMinutes / 60)} hours.`}
       </p>
     </section>
   );

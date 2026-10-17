@@ -1,7 +1,6 @@
 import type { ScheduleRequest, StudyBlock } from '../../types.ts';
-import { formatDuration, formatRange } from '../format.ts';
+import { formatClock, formatDateTime, formatDuration } from '../format.ts';
 import { EmptyState } from './EmptyState.tsx';
-
 interface LocationCardProps {
   block: StudyBlock | null;
   request: ScheduleRequest;
@@ -31,7 +30,9 @@ export function LocationCard({ block, request }: LocationCardProps) {
     <section className="cp-panel" aria-labelledby="cp-location-heading-detail">
       <div className="cp-panel__head">
         <h2 id="cp-location-heading-detail">Where</h2>
-        <p className="cp-panel__meta">{formatRange(block.start, block.end)}</p>
+        <p className="cp-panel__meta">
+          {formatDateTime(block.start)} – {formatClock(block.end)}
+        </p>
       </div>
 
       <p className="cp-location__name">{location ? location.name : 'No study location supplied'}</p>

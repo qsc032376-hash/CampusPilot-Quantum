@@ -1,5 +1,5 @@
 import type { ScheduleRequest, ScheduleResponse } from '../../types.ts';
-import { formatClock, formatDuration, formatRange } from '../format.ts';
+import { CAMPUS_TIME_ZONE, formatDayShort, formatDuration, formatRange } from '../format.ts';
 import { EmptyState } from './EmptyState.tsx';
 
 interface ScheduleResultsProps {
@@ -22,11 +22,14 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
     return request.tasks.find((task) => task.id === taskId)?.title ?? taskId;
   }
 
+  const crossDay = formatDayShort(request.windowStart) !== formatDayShort(request.windowEnd);
+  const startDay = formatDayShort(request.windowStart);
+
   return (
     <section className="cp-panel" aria-labelledby="cp-results-heading">
       <div className="cp-panel__head">
         <h2 id="cp-results-heading">Study plan</h2>
-        <p className="cp-panel__meta">Earliest deadline first, inside the window.</p>
+        <p className="cp-panel__meta">Earliest deadline first · all times {CAMPUS_TIME_ZONE}</p>
       </div>
 
       <button type="button" className="cp-button cp-button--full" onClick={onBuild}>
@@ -68,6 +71,8 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
             <ul className="cp-sessions">
               {result.blocks.map((block) => {
                 const isSelected = block.id === selectedId;
+                const blockDay = formatDayShort(block.start);
+                const dayPrefix = crossDay || blockDay !== startDay ? `${blockDay} · ` : '';
                 return (
                   <li key={block.id}>
                     <button
@@ -76,7 +81,10 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
                       onClick={() => onSelect(isSelected ? null : block.id)}
                       aria-pressed={isSelected}
                     >
-                      <span className="cp-session__time">{formatRange(block.start, block.end)}</span>
+                      <span className="cp-session__time">
+                        {dayPrefix}
+                        {formatRange(block.start, block.end)}
+                      </span>
                       <span className="cp-session__title">{block.title}</span>
                     </button>
                   </li>
@@ -101,10 +109,6 @@ export function ScheduleResults({ request, result, message, onBuild, selectedId,
 
           <p className="cp-panel__foot">Built with the shared mock scheduler. Repeating the same input gives the same plan.</p>
         </div>
-      )}
-
-      {result && result.blocks.length > 0 && (
-        <p className="cp-panel__foot">First session starts at {formatClock(result.blocks[0].start)}.</p>
       )}
     </section>
   );

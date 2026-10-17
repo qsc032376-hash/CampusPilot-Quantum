@@ -1,9 +1,9 @@
 /**
- * Display helpers for the CampusPilot dashboard.
+ * Display and time-resolution helpers for the CampusPilot dashboard.
  *
  * Every wall-clock decision goes through Intl with an explicit America/New_York
- * time zone, so daylight-saving changes are resolved by the platform instead of
- * a hard-coded UTC offset. Scheduling itself lives in src/scheduler.ts; nothing
+ * time zone, so daylight-saving rules come from the platform instead of a
+ * hard-coded UTC offset. Scheduling itself lives in src/scheduler.ts; nothing
  * here places, moves, or re-times a study block.
  */
 export const CAMPUS_TIME_ZONE = 'America/New_York';
@@ -43,6 +43,35 @@ const dayFormatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
+const dayShortFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: CAMPUS_TIME_ZONE,
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: CAMPUS_TIME_ZONE,
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+const zoneFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: CAMPUS_TIME_ZONE,
+  timeZoneName: 'short',
+});
+
+const wallOnlyFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'UTC',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
 const INPUT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})$/;
 
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -67,31 +96,82 @@ function offsetAt(instant: number): number {
   return Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second) - truncated;
 }
 
-function dayNumber(wall: WallTime): number {
-  return Math.floor(Date.UTC(wall.year, wall.month - 1, wall.day) / 86_400_000);
+/** UTC offset of campus time at an instant, e.g. "-04:00" or "-05:00". */
+export function formatOffset(instant: number): string {
+  const offsetMinutes = offsetAt(instant) / 60_000;
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absolute = Math.abs(offsetMinutes);
+  return `${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`;
 }
 
-/** Mirrors the scheduler's timestamp rule: an explicit offset or Z is required. */
-export function isValidTimestamp(value: string): boolean {
-  return /(Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
+/** Short zone abbreviation in force at an instant, e.g. "EDT" or "EST". */
+export function abbreviationAt(instant: number): string {
+  return zoneFormatter.formatToParts(new Date(instant)).find((part) => part.type === 'timeZoneName')?.value ?? '';
+}
+
+export interface CampusInputOption {
+  iso: string;
+  label: string;
+}
+
+export type CampusInputResult =
+  | { status: 'ok'; iso: string }
+  | { status: 'ambiguous'; options: CampusInputOption[] }
+  | { status: 'nonexistent'; message: string }
+  | { status: 'invalid'; message: string };
+
+function wallMatches(instant: number, wall: number): boolean {
+  const parts = partsAt(instant);
+  return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute) === wall;
 }
 
 /**
- * Converts a datetime-local value ("2026-10-19T17:00") typed as campus local
- * time into an ISO instant with an explicit offset. Two passes resolve the
- * offset so a spring-forward or fall-back boundary still lands on a real
- * instant; a wall time that does not exist (2:30 AM in spring) maps forward.
+ * Resolves a datetime-local value interpreted as campus wall time.
+ *
+ * A wall time can map to no instant (spring-forward gap) or to two instants
+ * (fall-back repeated hour). Both cases are reported instead of being silently
+ * shifted onto a neighbouring time.
  */
-export function campusInputToIso(value: string): string | null {
+export function parseCampusInput(value: string): CampusInputResult {
   const match = INPUT_PATTERN.exec(value);
-  if (!match) return null;
+  if (!match) return { status: 'invalid', message: 'Enter a date and time.' };
+
   const [, year, month, day, hour, minute] = match;
   const wall = Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
-  if (!Number.isFinite(wall)) return null;
-  let instant = wall - offsetAt(wall);
-  const corrected = wall - offsetAt(instant);
-  if (corrected !== instant) instant = corrected;
-  return Number.isFinite(instant) ? new Date(instant).toISOString() : null;
+  if (!Number.isFinite(wall)) return { status: 'invalid', message: 'Enter a valid date and time.' };
+
+  // Offsets in force before, at, and after the wall time cover both transitions.
+  const offsets = new Set<number>([offsetAt(wall - 86_400_000), offsetAt(wall), offsetAt(wall + 86_400_000)]);
+  const candidates: number[] = [];
+  for (const offset of offsets) {
+    const instant = wall - offset;
+    if (wallMatches(instant, wall) && !candidates.includes(instant)) candidates.push(instant);
+  }
+  candidates.sort((a, b) => a - b);
+
+  if (candidates.length === 0) {
+    const label = wallOnlyFormatter.format(new Date(wall));
+    return {
+      status: 'nonexistent',
+      message:
+        `${Number(hour)}:${minute} does not exist on ${label} in New York: ` +
+        'clocks jump forward and that hour is skipped. Pick a different time.',
+    };
+  }
+
+  if (candidates.length > 1) {
+    return {
+      status: 'ambiguous',
+      options: candidates.map((instant, index) => ({
+        iso: new Date(instant).toISOString(),
+        label:
+          `${index === 0 ? 'Earlier' : 'Later'} · ${formatClock(new Date(instant).toISOString())} ` +
+          `${abbreviationAt(instant)} (UTC${formatOffset(instant)})`,
+      })),
+    };
+  }
+
+  return { status: 'ok', iso: new Date(candidates[0]).toISOString() };
 }
 
 /** ISO instant rendered as a datetime-local value in campus time. */
@@ -101,32 +181,56 @@ export function isoToCampusInput(iso: string): string {
 }
 
 /**
- * Wall-clock minutes between two instants, counting each calendar day as 1440
- * minutes. Layout is calendar-like: a DST day still occupies one column-day
- * even though it is physically 23 or 25 hours long. Time-of-day arithmetic is
- * unaffected, and cross-day events land on the following day automatically.
+ * Real elapsed minutes between two instants. This is a timestamp difference,
+ * not a wall-clock subtraction, so a spring-forward hour does not vanish and a
+ * fall-back hour is not counted twice.
  */
-export function minutesFromWindowStart(iso: string, windowStartIso: string): number {
-  const current = partsAt(Date.parse(iso));
-  const start = partsAt(Date.parse(windowStartIso));
-  return (
-    (dayNumber(current) - dayNumber(start)) * 1440 +
-    (current.hour * 60 + current.minute) -
-    (start.hour * 60 + start.minute)
-  );
+export function elapsedMinutes(iso: string, windowStartIso: string): number {
+  return (Date.parse(iso) - Date.parse(windowStartIso)) / 60_000;
 }
 
-export function minuteOfDay(iso: string): number {
-  const parts = partsAt(Date.parse(iso));
-  return parts.hour * 60 + parts.minute;
+export interface VisibleSpan {
+  /** Minutes from the window start to the first visible moment. */
+  offsetMinutes: number;
+  /** Duration of the visible portion, in minutes. */
+  durationMinutes: number;
+  clippedStart: boolean;
+  clippedEnd: boolean;
 }
 
-export function formatMinuteOfDay(minutes: number): string {
-  const normalized = ((minutes % 1440) + 1440) % 1440;
-  const hour = Math.floor(normalized / 60);
-  const minute = normalized % 60;
-  const display = hour % 12 === 0 ? 12 : hour % 12;
-  return `${display}:${pad(minute)} ${hour < 12 ? 'AM' : 'PM'}`;
+/**
+ * Returns the part of an event that is visible inside the window, or null when
+ * the event lies entirely outside it. The caller keeps the original event data;
+ * this only computes how much of it to draw.
+ */
+export function clipToWindow(
+  startIso: string,
+  endIso: string,
+  windowStartIso: string,
+  windowEndIso: string,
+): VisibleSpan | null {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  const windowStart = Date.parse(windowStartIso);
+  const windowEnd = Date.parse(windowEndIso);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  if (end <= windowStart || start >= windowEnd) return null;
+
+  const visibleStart = Math.max(start, windowStart);
+  const visibleEnd = Math.min(end, windowEnd);
+  if (visibleEnd <= visibleStart) return null;
+
+  return {
+    offsetMinutes: (visibleStart - windowStart) / 60_000,
+    durationMinutes: (visibleEnd - visibleStart) / 60_000,
+    clippedStart: start < windowStart,
+    clippedEnd: end > windowEnd,
+  };
+}
+
+/** True when the window spans a daylight-saving transition. */
+export function windowSpansTransition(windowStartIso: string, windowEndIso: string): boolean {
+  return abbreviationAt(Date.parse(windowStartIso)) !== abbreviationAt(Date.parse(windowEndIso));
 }
 
 export function formatClock(iso: string): string {
@@ -137,8 +241,40 @@ export function formatDay(iso: string): string {
   return dayFormatter.format(new Date(iso));
 }
 
+export function formatDayShort(iso: string): string {
+  return dayShortFormatter.format(new Date(iso));
+}
+
+/** "Oct 19, 2026, 5:00 PM" — always carries the calendar date. */
+export function formatDateTime(iso: string): string {
+  return dateTimeFormatter.format(new Date(iso));
+}
+
 export function formatRange(startIso: string, endIso: string): string {
   return `${formatClock(startIso)} – ${formatClock(endIso)}`;
+}
+
+/** Range that keeps zone abbreviations when the window crosses a transition. */
+export function formatRangeDetailed(startIso: string, endIso: string, withZone: boolean): string {
+  if (!withZone) return formatRange(startIso, endIso);
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  const startZone = abbreviationAt(start);
+  const endZone = abbreviationAt(end);
+  return startZone === endZone
+    ? `${formatClock(startIso)} – ${formatClock(endIso)} ${endZone}`
+    : `${formatClock(startIso)} ${startZone} – ${formatClock(endIso)} ${endZone}`;
+}
+
+/** Window label that always shows both dates when the window crosses midnight. */
+export function formatWindowLabel(windowStartIso: string, windowEndIso: string): string {
+  const startDay = formatDayShort(windowStartIso);
+  const endDay = formatDayShort(windowEndIso);
+  const zone = abbreviationAt(Date.parse(windowStartIso));
+  if (startDay === endDay) {
+    return `${formatDay(windowStartIso)} · ${formatClock(windowStartIso)} – ${formatClock(windowEndIso)} ${zone}`;
+  }
+  return `${startDay} ${formatClock(windowStartIso)} – ${endDay} ${formatClock(windowEndIso)}`;
 }
 
 export function formatDuration(minutes: number): string {

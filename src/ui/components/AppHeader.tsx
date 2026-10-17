@@ -1,5 +1,5 @@
 import type { ScheduleRequest, ScheduleResponse } from '../../types.ts';
-import { formatDay, formatDuration } from '../format.ts';
+import { CAMPUS_TIME_ZONE, formatDuration, formatWindowLabel } from '../format.ts';
 
 interface AppHeaderProps {
   request: ScheduleRequest;
@@ -20,7 +20,10 @@ export function AppHeader({ request, result, onReset }: AppHeaderProps) {
         <p className="cp-brand">CP / CAMPUSPILOT</p>
         <h1 className="cp-header__title">Make room for your next study session.</h1>
         <p className="cp-header__meta">
-          {formatDay(request.windowStart)} · {request.locations.map((location) => location.name).join(' · ')}
+          {formatWindowLabel(request.windowStart, request.windowEnd)} · all times {CAMPUS_TIME_ZONE}
+        </p>
+        <p className="cp-header__meta">
+          {request.locations.map((location) => location.name).join(' · ')}
         </p>
       </div>
 

@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { ScheduleRequest } from '../../types.ts';
-import { campusInputToIso, formatClock, isoToCampusInput } from '../format.ts';
+import { CAMPUS_TIME_ZONE, formatDateTime, isoToCampusInput, parseCampusInput } from '../format.ts';
 
 export interface TaskDraft {
   title: string;
@@ -21,13 +21,21 @@ const MAX_DURATION_MINUTES = 600;
 /**
  * Collects one study task. Input is validated here so the pure scheduler in
  * src/scheduler.ts never receives a value it would reject with a thrown error.
+ *
+ * Campus wall times are resolved explicitly: a spring-forward gap is refused
+ * rather than shifted, and a fall-back repeated hour asks which offset applies.
  */
 export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('60');
   const [due, setDue] = useState(() => isoToCampusInput(request.windowEnd));
+  const [choiceIndex, setChoiceIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fieldId = useId();
+
+  const preview = parseCampusInput(due);
+  const options = preview.status === 'ambiguous' ? preview.options : [];
+  const activeChoice = Math.min(choiceIndex, Math.max(0, options.length - 1));
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,11 +56,17 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
       return;
     }
 
-    const dueAt = campusInputToIso(due);
-    if (!dueAt) {
-      setError('Pick a valid due date and time.');
+    const parsed = parseCampusInput(due);
+    if (parsed.status === 'invalid') {
+      setError(parsed.message);
       return;
     }
+    if (parsed.status === 'nonexistent') {
+      setError(parsed.message);
+      return;
+    }
+
+    const dueAt = parsed.status === 'ok' ? parsed.iso : parsed.options[activeChoice].iso;
     if (Date.parse(dueAt) <= Date.parse(request.windowStart)) {
       setError('The deadline must be after the scheduling window starts.');
       return;
@@ -67,7 +81,7 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
     <section className="cp-panel" aria-labelledby={`${fieldId}-heading`}>
       <div className="cp-panel__head">
         <h2 id={`${fieldId}-heading`}>Add a study task</h2>
-        <p className="cp-panel__meta">Everything stays in memory for this demo.</p>
+        <p className="cp-panel__meta">All times are {CAMPUS_TIME_ZONE}.</p>
       </div>
 
       <form className="cp-form" onSubmit={handleSubmit} noValidate>
@@ -98,7 +112,7 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
           </label>
 
           <label className="cp-field">
-            <span className="cp-field__label">Due</span>
+            <span className="cp-field__label">Due ({CAMPUS_TIME_ZONE})</span>
             <input
               className="cp-input"
               type="datetime-local"
@@ -107,6 +121,35 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
             />
           </label>
         </div>
+
+        {preview.status === 'ambiguous' && (
+          <label className="cp-field">
+            <span className="cp-field__label">This hour happens twice — pick which one</span>
+            <select
+              className="cp-input"
+              value={activeChoice}
+              onChange={(event) => setChoiceIndex(Number(event.target.value))}
+            >
+              {options.map((option, index) => (
+                <option key={option.iso} value={index}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {preview.status === 'ok' && (
+          <p className="cp-hint">
+            Deadline resolves to {formatDateTime(preview.iso)}.
+          </p>
+        )}
+
+        {preview.status === 'nonexistent' && (
+          <p className="cp-error" role="alert">
+            {preview.message}
+          </p>
+        )}
 
         {error && (
           <p className="cp-error" role="alert">
@@ -128,7 +171,7 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
             <li key={task.id} className="cp-tasks__row">
               <span className="cp-tasks__title">{task.title}</span>
               <span className="cp-tasks__meta">
-                {task.durationMinutes} min · due {formatClock(task.dueAt)}
+                {task.durationMinutes} min · due {formatDateTime(task.dueAt)}
               </span>
               <button
                 type="button"

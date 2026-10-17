@@ -7,6 +7,7 @@ import type { TaskDraft } from './components/TaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
+import { createResetState } from './dashboardReset.ts';
 import './ui.css';
 
 interface DashboardProps {
@@ -28,6 +29,8 @@ export function Dashboard({ request: initialRequest }: DashboardProps) {
   const [result, setResult] = useState<ScheduleResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Bumped only by Reset so the form remounts with clean state and no stale errors. */
+  const [formKey, setFormKey] = useState(0);
 
   function build(next: ScheduleRequest): void {
     try {
@@ -62,10 +65,12 @@ export function Dashboard({ request: initialRequest }: DashboardProps) {
   }
 
   function handleReset(): void {
-    setRequest(initialRequest);
-    setResult(null);
-    setMessage(null);
-    setSelectedId(null);
+    const next = createResetState(initialRequest, formKey);
+    setRequest(next.request);
+    setResult(next.result);
+    setMessage(next.message);
+    setSelectedId(next.selectedId);
+    setFormKey(next.formKey);
   }
 
   const selectedBlock = result?.blocks.find((block) => block.id === selectedId) ?? null;
@@ -76,7 +81,7 @@ export function Dashboard({ request: initialRequest }: DashboardProps) {
 
       <main className="cp-main">
         <div className="cp-column">
-          <TaskForm request={request} onAdd={handleAddTask} onRemove={handleRemoveTask} />
+          <TaskForm key={formKey} request={request} onAdd={handleAddTask} onRemove={handleRemoveTask} />
           <LocationCard block={selectedBlock} request={request} />
         </div>
 
