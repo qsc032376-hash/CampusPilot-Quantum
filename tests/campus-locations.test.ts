@@ -15,8 +15,8 @@ import {
 } from '../src/features/campus-locations/index.ts';
 
 const mondayMorning = { day: 'Mon', startMinutes: 600, endMinutes: 720 } as const;
-const fromThompson = { lat: 39.999263, lng: -83.0149043 };
-const ohioUnion = { lat: 39.9976645, lng: -83.0085472 };
+const fromThompson = { lat: 39.99925188, lng: -83.01488152 };
+const ohioUnion = { lat: 39.99765973, lng: -83.00864174 };
 
 // --- Static data -----------------------------------------------------------
 
