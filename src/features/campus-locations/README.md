@@ -58,7 +58,7 @@ src/features/campus-locations/
   index.ts                  Public exports
   README.md                 This document
 tests/
-  campus-locations.test.ts  30 node:test checks
+  campus-locations.test.ts  39 node:test checks
 ```
 
 ## Verified locations (2026-10-17)
@@ -179,6 +179,13 @@ interface LocationPreferences {
   requireReservable?: boolean;
   categoryFilter?: readonly CampusLocationCategory[]; // empty = no filter
 }
+
+interface LocationRecommendation {
+  location: CampusLocationDetails;
+  score: number;
+  walkMinutes: number | null;
+  reasons: readonly string[];
+}
 ```
 
 A block must start and end on the same calendar day. It cannot cross midnight:
@@ -192,12 +199,17 @@ Determinism and edge cases:
   block (18th Avenue's all-day window also covers early-morning blocks such as
   02:00-04:00).
 - Filters run before scoring.
-- Sort: score descending, then shorter walk, then name using locale-independent
-  comparison. Same input always gives the same output.
+- Score: 50 for a matching simulated open window, +20 when official room
+  booking is offered, plus `max(0, 30 - walkMinutes)` when an origin exists.
+  There is no distance bonus and `walkMinutes` is `null` without an origin.
+- Sort: score descending, then shorter walk, then name, then ID using
+  locale-independent comparison. Same input always gives the same output,
+  even when two locations have the same name.
 - No matching location, no availability record, or an empty availability array
   returns `[]` — never throws.
 - Invalid blocks throw `RangeError` (end before start, minutes outside 0-1440,
-  unknown day). A negative or non-finite `maxWalkMinutes` also throws.
+  unknown day). A negative or non-finite `maxWalkMinutes` or invalid latitude/
+  longitude also throws.
 - Walking time is straight-line distance × 1.25 at 80 m/min, rounded up.
   Identical points return 0 minutes; any positive distance returns at least 1.
   It is a ranking estimate, not a route or an accessibility measure.
@@ -219,6 +231,56 @@ const bookingUrl = top?.location.reservationUrl; // open it in a new tab
 Only render a "Reserve" button when `location.reservationUrl` exists. The app
 must not attempt login, form submission or booking.
 
+### UI handoff for B
+
+In a component under `src/ui/components/`, use this import path. For the
+sample's Monday 11:00 a.m.–noon study block, call the function with campus-local
+minutes after midnight. The result is an array, so render every item rather
+than only `matches[0]`:
+
+```ts
+import {
+  AVAILABILITY_DISCLAIMER,
+  recommendLocations,
+} from '../../features/campus-locations/index.ts';
+
+const matches = recommendLocations(
+  { day: 'Mon', startMinutes: 11 * 60, endMinutes: 12 * 60 },
+  { requireReservable: false, categoryFilter: [] },
+);
+
+// matches.map(({ location, score, walkMinutes, reasons }) => ...)
+// Display AVAILABILITY_DISCLAIMER beside the list.
+```
+
+`matches` contains five items with the current simulated Monday hours. Each
+item has `location.id` (the canonical key), `location.name`, `address`,
+`category`, `reservable`, optional `reservationUrl` and `infoUrl`; `score` is
+the ranking number, `walkMinutes` is `null` without `origin`, and `reasons`
+contains display text including the **simulated hours** label. `score` is not
+live occupancy or a room booking status. With no `origin`, reservable places
+score 70 and Ohio Union scores 50; tied places sort by name, then ID. An empty
+array means no candidate passed all filters.
+
+Scheduler block timestamps are UTC ISO strings, but `StudyBlockWindow` takes
+`America/New_York` weekday and wall-clock minutes. Convert **both** instants
+using `Intl.DateTimeFormat` with `timeZone: 'America/New_York'`; do not use
+`getUTCDay()`, the viewer's local time zone, or a fixed UTC offset. Check that
+the converted start and end belong to the same campus-local date before
+calling this same-day API. A block crossing a daylight-saving transition also
+needs explicit handling: the repeated fall hour cannot be represented by one
+increasing `startMinutes`/`endMinutes` pair, and the spring gap distorts elapsed
+minutes. Do not silently convert such a block into a misleading window.
+
+Suggested UI conversion fixtures (UTC → `America/New_York`):
+
+| UTC instant | Expected campus-local time |
+| --- | --- |
+| `2026-10-19T15:00:00Z` | Mon 2026-10-19 11:00, GMT-4 |
+| `2026-10-20T01:00:00Z` | Mon 2026-10-19 21:00, GMT-4 |
+| `2026-03-08T06:30:00Z` / `2026-03-08T07:30:00Z` | Sun 01:30 GMT-5 / Sun 03:30 GMT-4 (spring transition) |
+| `2026-11-01T05:30:00Z` / `2026-11-01T06:30:00Z` | Sun 01:30 GMT-4 / Sun 01:30 GMT-5 (repeated fall hour) |
+
 ## Tests
 
 From the repository root:
@@ -227,7 +289,7 @@ From the repository root:
 node --test tests/campus-locations.test.ts
 ```
 
-Expected: **30/30 passing**. The file uses Node's built-in test runner and
+Expected: **39/39 passing**. The file uses Node's built-in test runner and
 assertions, matching `tests/scheduler.test.ts`; no test dependency is added.
 
 Run the existing scheduler suite too, to prove the shared code is untouched:
