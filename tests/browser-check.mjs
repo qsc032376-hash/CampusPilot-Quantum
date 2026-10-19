@@ -272,6 +272,33 @@ async function main() {
     await evaluate("document.querySelector('#app .cp-session').click()");
     await new Promise((resolve) => setTimeout(resolve, 300));
     const locationText = await evaluate("document.querySelector('#app').innerText");
+
+    // D's blocking finding: the ordinary default-assignment case must explain
+    // itself, and the note has to be really visible, not just in the markup.
+    const statusNote = await evaluate(`(() => {
+      const el = document.querySelector('#app .cp-location__status');
+      if (!el) return null;
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return {
+        text: el.textContent.trim(),
+        visible:
+          box.width > 0 &&
+          box.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          Number(style.opacity) > 0,
+      };
+    })()`);
+    record(
+      'default assignment note is visible without opening anything',
+      !!statusNote &&
+        statusNote.visible &&
+        /Default scheduler assignment/.test(statusNote.text) &&
+        /not been verified/.test(statusNote.text),
+      statusNote ? `${statusNote.visible} :: ${statusNote.text}` : 'missing element',
+    );
+
     record(
       'assigned location shows the verified address',
       locationText.includes('1858 Neil Avenue Mall'),

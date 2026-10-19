@@ -70,6 +70,15 @@ export function LocationCard({ block, request }: LocationCardProps) {
         {block.title} · {formatDuration(minutes)}
       </p>
 
+      {/*
+        Always visible, including the ordinary case: the scheduler assigns one
+        location by default and this prototype never verifies real opening
+        hours, so the card must not look like a confirmed booking.
+      */}
+      <p className="cp-location__status">
+        Default scheduler assignment; real opening hours have not been verified.
+      </p>
+
       {rows.length > 0 ? (
         <dl className="cp-location__details">
           {rows.map((row) => (

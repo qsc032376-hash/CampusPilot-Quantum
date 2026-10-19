@@ -189,6 +189,11 @@ check(
   plainHtml.includes('1858 Neil Avenue Mall'),
   '',
 );
+check(
+  'the ordinary default assignment states it is unverified',
+  plainHtml.includes('Default scheduler assignment; real opening hours have not been verified.'),
+  '',
+);
 
 const unknownRequest = {
   ...sampleRequest,
@@ -304,6 +309,11 @@ const dstWhere = renderToStaticMarkup(createElement(LocationCard, { block: dstBl
 check(
   'a cross-DST block marks the assignment as unverified',
   dstWhere.includes('checked against opening hours') && dstWhere.includes('daylight-saving'),
+  '',
+);
+check(
+  'the default assignment note is shown in every state',
+  earlyWhere.includes('Default scheduler assignment') && dstWhere.includes('Default scheduler assignment'),
   '',
 );
 
