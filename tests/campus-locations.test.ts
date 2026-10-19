@@ -228,7 +228,7 @@ test('30. Ohio Union reason says booking is unverified, not unavailable', () => 
 
   // Other locations keep their booking reason, and ordering is unchanged.
   const thompson = results.find((result) => result.location.id === 'thompson-library');
-  assert.ok(thompson?.reasons.includes('Official study-room booking is available.'));
+  assert.ok(thompson?.reasons.includes('Official study-room booking is offered; room availability is unverified.'));
   assert.deepEqual(results.map((result) => result.location.id), [
     '18th-avenue-library',
     'faes-library',
@@ -236,4 +236,136 @@ test('30. Ohio Union reason says booking is unverified, not unavailable', () => 
     'thompson-library',
     'ohio-union',
   ]);
+});
+
+test('31. empty, single and multiple matches follow the simulated weekday windows', () => {
+  assert.deepEqual(
+    recommendLocations({ day: 'Sun', startMinutes: 0, endMinutes: 60 }),
+    [],
+  );
+  assert.deepEqual(
+    recommendLocations({ day: 'Mon', startMinutes: 120, endMinutes: 240 }).map((item) => item.location.id),
+    ['18th-avenue-library'],
+  );
+  assert.deepEqual(
+    recommendLocations({ day: 'Mon', startMinutes: 660, endMinutes: 720 }).map((item) => item.location.id),
+    ['18th-avenue-library', 'faes-library', 'health-sciences-library', 'thompson-library', 'ohio-union'],
+  );
+  assert.deepEqual(
+    recommendLocations({ day: 'Sat', startMinutes: 540, endMinutes: 600 }).map((item) => item.location.id),
+    ['18th-avenue-library', 'thompson-library'],
+  );
+});
+
+test('32. a block must fit within one window, including exact opening and closing boundaries', () => {
+  const closing = { day: 'Mon', startMinutes: 960, endMinutes: 1020 } as const;
+  assert.ok(recommendLocations(closing).some((item) => item.location.id === 'faes-library'));
+  assert.ok(!recommendLocations({ ...closing, endMinutes: 1021 }).some((item) => item.location.id === 'faes-library'));
+  assert.ok(!recommendLocations({ day: 'Mon', startMinutes: 479, endMinutes: 540 }).some((item) => item.location.id === 'faes-library'));
+  assert.ok(recommendLocations({ day: 'Mon', startMinutes: 480, endMinutes: 540 }).some((item) => item.location.id === 'faes-library'));
+  assert.deepEqual(
+    recommendLocations({ day: 'Fri', startMinutes: 1380, endMinutes: 1440 }).map((item) => item.location.id),
+    ['18th-avenue-library'],
+  );
+});
+
+test('33. separate adjacent windows cannot be combined to cover a block', () => {
+  const [thompson] = CAMPUS_LOCATIONS;
+  const [thompsonHours] = SIMULATED_AVAILABILITY;
+  const availability = [{
+    ...thompsonHours,
+    weekly: { ...thompsonHours.weekly, Mon: [
+      { startMinutes: 600, endMinutes: 660 },
+      { startMinutes: 660, endMinutes: 720 },
+    ] },
+  }];
+  assert.deepEqual(recommendLocations(mondayMorning, {}, { locations: [thompson], availability }), []);
+  assert.equal(recommendLocations({ day: 'Mon', startMinutes: 600, endMinutes: 660 }, {}, { locations: [thompson], availability }).length, 1);
+});
+
+test('34. booking and category filters intersect and an empty category list applies no filter', () => {
+  assert.deepEqual(
+    recommendLocations(mondayMorning, { requireReservable: true }).map((item) => item.location.id),
+    ['18th-avenue-library', 'faes-library', 'health-sciences-library', 'thompson-library'],
+  );
+  assert.deepEqual(
+    recommendLocations(mondayMorning, { categoryFilter: ['student-center'] }).map((item) => item.location.id),
+    ['ohio-union'],
+  );
+  assert.deepEqual(
+    recommendLocations(mondayMorning, { requireReservable: true, categoryFilter: ['student-center'] }),
+    [],
+  );
+  assert.deepEqual(
+    recommendLocations(mondayMorning, { categoryFilter: [] }),
+    recommendLocations(mondayMorning),
+  );
+});
+
+test('35. walking limit uses the origin, while no origin keeps unknown walking time null', () => {
+  const nearby = recommendLocations(mondayMorning, { origin: fromThompson, maxWalkMinutes: 5 });
+  assert.deepEqual(nearby.map((item) => [item.location.id, item.walkMinutes, item.score]), [
+    ['thompson-library', 0, 100],
+    ['18th-avenue-library', 5, 95],
+  ]);
+  const withoutOrigin = recommendLocations(mondayMorning, { maxWalkMinutes: 0 });
+  assert.deepEqual(withoutOrigin, recommendLocations(mondayMorning));
+  assert.ok(withoutOrigin.every((item) => item.walkMinutes === null));
+  assert.ok(withoutOrigin.every((item) => item.reasons.every((reason) => !reason.includes('min walk'))));
+});
+
+test('36. missing availability is excluded and recommendation IDs match the canonical dataset', () => {
+  const availability = SIMULATED_AVAILABILITY.filter((record) => record.locationId !== 'thompson-library');
+  const results = recommendLocations(mondayMorning, {}, { availability });
+  assert.deepEqual(results.map((item) => item.location.id), [
+    '18th-avenue-library', 'faes-library', 'health-sciences-library', 'ohio-union',
+  ]);
+  const knownIds = new Set(CAMPUS_LOCATIONS.map((location) => location.id));
+  assert.ok(results.every((item) => knownIds.has(item.location.id)));
+  assert.ok(!results.some((item) => item.location.id === 'thompson'));
+});
+
+test('37. no-origin scores and reasons describe simulated hours, not live availability', () => {
+  const results = recommendLocations(mondayMorning);
+  assert.deepEqual(results.map((item) => item.score), [70, 70, 70, 70, 50]);
+  for (const item of results) {
+    assert.equal(item.walkMinutes, null);
+    assert.ok(item.reasons.some((reason) => /simulated hours/i.test(reason)));
+    assert.ok(item.reasons.every((reason) => !/live|available now|free now/i.test(reason)));
+    if (item.location.reservable) {
+      assert.ok(item.reasons.some((reason) => /room availability is unverified/i.test(reason)));
+    }
+  }
+  assert.match(AVAILABILITY_DISCLAIMER, /not live/i);
+});
+
+test('38. ties with the same name use ID, independent of source array order', () => {
+  const [thompson, avenue] = CAMPUS_LOCATIONS;
+  const [thompsonHours, avenueHours] = SIMULATED_AVAILABILITY;
+  const locations = [
+    { ...thompson, id: 'z-library', name: 'Same name' },
+    { ...avenue, id: 'a-library', name: 'Same name' },
+  ];
+  const availability = [
+    { ...thompsonHours, locationId: 'z-library' },
+    { ...avenueHours, locationId: 'a-library' },
+  ];
+  for (const ordered of [locations, [...locations].reverse()]) {
+    assert.deepEqual(
+      recommendLocations(mondayMorning, {}, { locations: ordered, availability }).map((item) => item.location.id),
+      ['a-library', 'z-library'],
+    );
+  }
+});
+
+test('39. invalid time, day, walking limit and coordinates fail clearly', () => {
+  assert.throws(() => recommendLocations({ day: 'Mon', startMinutes: 600, endMinutes: 600 }), RangeError);
+  assert.throws(() => recommendLocations({ day: 'Mon', startMinutes: 600.5, endMinutes: 720 }), RangeError);
+  assert.throws(() => recommendLocations({ day: 'Mon', startMinutes: 600, endMinutes: 1441 }), RangeError);
+  assert.throws(() => recommendLocations({ day: 'Bad' as 'Mon', startMinutes: 600, endMinutes: 720 }), RangeError);
+  assert.throws(() => recommendLocations(mondayMorning, { maxWalkMinutes: Number.NaN }), RangeError);
+  assert.throws(() => recommendLocations(mondayMorning, { maxWalkMinutes: -1 }), RangeError);
+  assert.throws(() => recommendLocations(mondayMorning, { origin: { lat: Number.NaN, lng: -83 } }), RangeError);
+  assert.throws(() => recommendLocations(mondayMorning, { origin: { lat: 91, lng: -83 } }), RangeError);
+  assert.throws(() => estimateWalkMinutes(fromThompson, { lat: 40, lng: 181 }), RangeError);
 });

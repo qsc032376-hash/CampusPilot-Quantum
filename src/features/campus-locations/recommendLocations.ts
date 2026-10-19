@@ -138,6 +138,8 @@ export function isLocationOpen(
  * distance rounds up to at least 1. Good enough to rank; not a route.
  */
 export function estimateWalkMinutes(from: GeoPoint, to: GeoPoint): number {
+  assertValidGeoPoint(from, 'origin');
+  assertValidGeoPoint(to, 'location coordinates');
   const metres = haversineMeters(from, to) * STREET_ROUTE_FACTOR;
   return Math.ceil(metres / WALKING_SPEED_METERS_PER_MINUTE);
 }
@@ -171,7 +173,7 @@ function buildRecommendation(
 
   if (location.reservable) {
     score += 20;
-    reasons.push('Official study-room booking is available.');
+    reasons.push('Official study-room booking is offered; room availability is unverified.');
   } else {
     reasons.push('Individual study-room booking has not been verified.');
   }
@@ -194,7 +196,10 @@ function compareRecommendations(a: LocationRecommendation, b: LocationRecommenda
     return aWalk - bWalk;
   }
   // Locale-independent comparison keeps ordering deterministic everywhere.
-  return a.location.name < b.location.name ? -1 : a.location.name > b.location.name ? 1 : 0;
+  if (a.location.name !== b.location.name) {
+    return a.location.name < b.location.name ? -1 : 1;
+  }
+  return a.location.id < b.location.id ? -1 : a.location.id > b.location.id ? 1 : 0;
 }
 
 function assertValidBlock(block: StudyBlockWindow): void {
@@ -215,11 +220,23 @@ function assertValidBlock(block: StudyBlockWindow): void {
 }
 
 function assertValidPreferences(preferences: LocationPreferences): void {
+  if (preferences.origin) {
+    assertValidGeoPoint(preferences.origin, 'origin');
+  }
   if (
     preferences.maxWalkMinutes !== undefined &&
     (!Number.isFinite(preferences.maxWalkMinutes) || preferences.maxWalkMinutes < 0)
   ) {
     throw new RangeError('maxWalkMinutes must be a non-negative number.');
+  }
+}
+
+function assertValidGeoPoint(point: GeoPoint, label: string): void {
+  if (
+    !Number.isFinite(point.lat) || point.lat < -90 || point.lat > 90 ||
+    !Number.isFinite(point.lng) || point.lng < -180 || point.lng > 180
+  ) {
+    throw new RangeError(`${label} must have finite latitude (-90 to 90) and longitude (-180 to 180).`);
   }
 }
 
