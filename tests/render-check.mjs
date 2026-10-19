@@ -12,6 +12,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { WeeklySchedule } from './src/ui/components/WeeklySchedule.tsx';
 import { ScheduleResults } from './src/ui/components/ScheduleResults.tsx';
 import { LocationCard } from './src/ui/components/LocationCard.tsx';
+import { RecommendedLocations } from './src/ui/components/RecommendedLocations.tsx';
 import { TaskForm } from './src/ui/components/TaskForm.tsx';
 import { sampleRequest } from './src/sample.ts';
 import { generateMockSchedule } from './src/scheduler.ts';
@@ -162,7 +163,7 @@ const detailedRequest = {
   ...sampleRequest,
   locations: [
     {
-      id: 'thompson',
+      id: 'thompson-library',
       name: 'Thompson Library',
       building: 'Thompson Library',
       room: 'Room 304',
@@ -184,8 +185,135 @@ const plainHtml = renderToStaticMarkup(
   createElement(LocationCard, { block: contractResult.blocks[0], request: sampleRequest }),
 );
 check(
-  'missing location details fall back without inventing values',
-  plainHtml.includes('No building or room details supplied') && !plainHtml.includes('Listed hours'),
+  'sample ids resolve to the verified address',
+  plainHtml.includes('1858 Neil Avenue Mall'),
+  '',
+);
+check(
+  'the ordinary default assignment states it is unverified',
+  plainHtml.includes('Default scheduler assignment; real opening hours have not been verified.'),
+  '',
+);
+
+const unknownRequest = {
+  ...sampleRequest,
+  locations: [{ id: 'custom-room', name: 'Unverified Study Room' }],
+};
+const unknownHtml = renderToStaticMarkup(
+  createElement(LocationCard, { block: contractResult.blocks[0], request: unknownRequest }),
+);
+check(
+  'unknown location falls back without inventing details',
+  unknownHtml.includes('No building or room details supplied') && !unknownHtml.includes('Listed hours'),
+  '',
+);
+
+// --- the standalone recommendation list (the reported bug) ---
+const threePmBlock = {
+  id: 'study-a',
+  taskId: 't1',
+  title: 'Study',
+  start: '2026-10-19T15:00:00-04:00',
+  end: '2026-10-19T16:30:00-04:00',
+  locationId: 'thompson-library',
+};
+const manyHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: threePmBlock, request: sampleRequest }),
+);
+check(
+  'several locations are listed for an afternoon block',
+  manyHtml.includes('5 places are listed as open') &&
+    manyHtml.includes('18th Avenue Library') &&
+    manyHtml.includes('Ohio Union'),
+  '',
+);
+check('each recommendation shows a score', (manyHtml.match(/cp-locations__score/g) || []).length === 5, '');
+check('each recommendation shows a reason', (manyHtml.match(/simulated hours/g) || []).length === 5, '');
+check(
+  'bookable locations link to the official reservation page',
+  manyHtml.includes('Reserve study room') && manyHtml.includes('libraryroombooking.cloud.osu.edu'),
+  '',
+);
+check(
+  'non-bookable locations link to their official page instead',
+  manyHtml.includes('Location details') && manyHtml.includes('ohiounion.osu.edu'),
+  '',
+);
+check('recommendation reasons mark hours as simulated', manyHtml.includes('simulated hours'), '');
+check('availability disclaimer is rendered', manyHtml.includes('Availability is simulated'), '');
+
+const oneBlock = { ...threePmBlock, start: '2026-10-19T00:30:00-04:00', end: '2026-10-19T01:00:00-04:00' };
+const oneHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: oneBlock, request: sampleRequest }),
+);
+check(
+  'exactly one location renders a count of one',
+  oneHtml.includes('1 place is listed as open') && oneHtml.includes('18th Avenue Library'),
+  '',
+);
+
+const zeroBlock = { ...threePmBlock, start: '2026-10-18T02:00:00-04:00', end: '2026-10-18T03:00:00-04:00' };
+const zeroHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: zeroBlock, request: sampleRequest }),
+);
+check(
+  'no open location shows an explicit fallback',
+  zeroHtml.includes('No location in the campus list is listed as open'),
+  '',
+);
+
+// --- strict time conversion: DST, seconds, and unverified assignments ---
+const dstBlock = {
+  ...threePmBlock,
+  start: '2026-11-01T01:30:00-04:00',
+  end: '2026-11-01T01:45:00-05:00',
+};
+const dstHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: dstBlock, request: sampleRequest }),
+);
+check(
+  'a cross-DST block explains why no list is shown',
+  dstHtml.includes('daylight-saving change') && !dstHtml.includes('cp-locations__row'),
+  '',
+);
+
+const secondsBlock = { ...threePmBlock, start: '2026-10-19T15:00:30-04:00' };
+const secondsHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: secondsBlock, request: sampleRequest }),
+);
+check(
+  'a block with seconds is rejected rather than rounded',
+  secondsHtml.includes('whole minute') && !secondsHtml.includes('cp-locations__row'),
+  '',
+);
+
+const manyTags = (manyHtml.match(/cp-tag">Scheduled/g) || []).length;
+check('exactly one recommendation is marked as scheduled', manyTags === 1, 'tags=' + manyTags);
+
+const earlyBlock = {
+  ...threePmBlock,
+  start: '2026-10-19T00:30:00-04:00',
+  end: '2026-10-19T01:00:00-04:00',
+};
+const earlyWhere = renderToStaticMarkup(
+  createElement(LocationCard, { block: earlyBlock, request: sampleRequest }),
+);
+check(
+  'an unverified assignment is called out in the Where card',
+  earlyWhere.includes('not</strong> checked against opening hours') ||
+    earlyWhere.includes('not covered by the simulated opening hours'),
+  '',
+);
+
+const dstWhere = renderToStaticMarkup(createElement(LocationCard, { block: dstBlock, request: sampleRequest }));
+check(
+  'a cross-DST block marks the assignment as unverified',
+  dstWhere.includes('checked against opening hours') && dstWhere.includes('daylight-saving'),
+  '',
+);
+check(
+  'the default assignment note is shown in every state',
+  earlyWhere.includes('Default scheduler assignment') && dstWhere.includes('Default scheduler assignment'),
   '',
 );
 
