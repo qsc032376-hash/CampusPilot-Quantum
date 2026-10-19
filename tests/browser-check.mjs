@@ -415,6 +415,32 @@ async function main() {
       !/more than 15 minutes late/i.test(hslText),
       '',
     );
+    record(
+      'Thompson shows no ELA section',
+      !/Extended Library Access/i.test(plannerText),
+      '',
+    );
+    record(
+      'HSL renders the separate ELA context note',
+      /extended library access/i.test(hslText) &&
+        hslText.includes('first come, first served') &&
+        hslText.includes('A reservation is not required during these hours.') &&
+        hslText.includes('Other study-room rules still apply.'),
+      '',
+    );
+    record(
+      'HSL ELA note keeps the uncertainty caveat and cites its source',
+      /10-minute release rule/i.test(hslText) &&
+        (await evaluate(
+          "[...document.querySelectorAll('#app .cp-reservation a')].some((a) => a.href.includes('extended-library-access-ela'))",
+        )),
+      '',
+    );
+    record(
+      'HSL ordinary rules still show the two-hour limit',
+      /official rules/i.test(hslText) && hslText.includes('2-hour reservations'),
+      '',
+    );
   } finally {
     if (socket) socket.close();
     chrome.kill();

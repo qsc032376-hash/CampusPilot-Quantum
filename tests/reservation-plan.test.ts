@@ -65,7 +65,57 @@ test('a time in the past is rejected', () => {
     NOW,
   );
   assert.equal(result.ok, false);
-  assert.ok(result.issues.some((issue) => issue.code === 'invalid-time'));
+  assert.ok(result.issues.some((issue) => issue.code === 'start-in-the-past'));
+});
+
+test('a past start is rejected even when the end is still in the future', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const result = validateReservation(
+    {
+      locationId: 'thompson-library',
+      startIso: '2026-10-17T11:00:00Z',
+      endIso: '2026-10-17T13:00:00Z',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'start-in-the-past'));
+});
+
+test('a start exactly at the current instant is still bookable', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const result = validateReservation(
+    { locationId: 'thompson-library', startIso: SOON_START, endIso: SOON_END, groupSize: 2, purpose: '' },
+    policy,
+    new Date(Date.parse(SOON_START)),
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.length, 0);
+});
+
+test('a plan that expires while ready returns to draft without opening anything', () => {
+  const ready = readyPlan();
+  assert.equal(ready.state, 'ready');
+
+  let openCalls = 0;
+  const afterStart = new Date('2026-10-19T20:00:00Z');
+  const result = openOfficialSystem(
+    ready,
+    () => {
+      openCalls += 1;
+      return true;
+    },
+    afterStart,
+  );
+
+  assert.equal(openCalls, 0, 'openUrl must not be called for an expired plan');
+  assert.equal(result.state, 'draft');
+  assert.equal(result.navigation.attempted, false);
+  assert.equal(result.navigation.succeeded, false);
+  assert.ok(result.validation.issues.some((issue) => issue.code === 'start-in-the-past'));
 });
 
 test('the verified four-hour limit is enforced', () => {
@@ -434,4 +484,63 @@ test('structured limits stay traceable to the official rules text', () => {
   assert.ok(String(hsl!.booking.rules).includes('up to 5 people'));
   assert.ok(String(hsl!.booking.rules).includes('2-hour'));
   assert.ok(String(hsl!.booking.rules).includes('3 days ahead'));
+});
+
+// --- HSL ordinary rules vs Extended Library Access --------------------------
+
+test('HSL keeps ordinary rules separate from the ELA context', () => {
+  const policy = findReservationPolicy('health-sciences-library');
+  assert.ok(policy);
+  assert.match(policy!.ordinaryRules, /Third-floor study rooms/);
+  assert.match(policy!.ordinaryRules, /up to 5 people/);
+  assert.match(policy!.ordinaryRules, /2-hour/);
+  assert.match(policy!.ordinaryRules, /3 days ahead/);
+  // The ordinary rule text is no longer mixed with the ELA clause.
+  assert.doesNotMatch(policy!.ordinaryRules, /Extended Library Access|ELA/);
+
+  const ela = policy!.ela;
+  assert.ok(ela, 'HSL must carry a separate ELA note');
+  assert.equal(ela!.sourceUrl, 'https://hsl.osu.edu/using-library/extended-library-access-ela');
+  assert.equal(ela!.verifiedOn, null, 'no read date is recorded for the ELA page');
+  assert.equal(ela!.label, 'Extended Library Access (ELA)');
+
+  const text = ela!.requirements.join(' ');
+  assert.match(text, /pre-approved after-hours access/);
+  assert.match(text, /third-floor study spaces only/);
+  assert.match(text, /first come, first served/);
+  assert.match(text, /reservation is not required/);
+  assert.match(text, /standard two-hour reservation limit does not apply/);
+  assert.match(text, /Other study-room rules still apply/);
+  assert.match(ela!.caveat, /10-minute release rule/);
+});
+
+test('ELA wording never claims prohibition, unlimited time or current availability', () => {
+  const ela = findReservationPolicy('health-sciences-library')!.ela!;
+  const combined = [...ela.requirements, ela.caveat].join(' ').toLowerCase();
+  for (const forbidden of ['prohibit', 'not allowed', 'unlimited', 'available now', 'currently available', 'guarantee']) {
+    assert.ok(!combined.includes(forbidden), `ELA text must not say "${forbidden}"`);
+  }
+});
+
+test('the ELA note is only attached to HSL', () => {
+  for (const locationId of ['thompson-library', '18th-avenue-library', 'faes-library', 'ohio-union']) {
+    assert.equal(findReservationPolicy(locationId)?.ela, null, locationId);
+  }
+});
+
+test('the ELA note does not relax ordinary reservation validation', () => {
+  const policy = findReservationPolicy('health-sciences-library');
+  const tooLong = validateReservation(
+    {
+      locationId: 'health-sciences-library',
+      startIso: '2026-10-19T10:00:00-04:00',
+      endIso: '2026-10-19T13:00:00-04:00',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(tooLong.ok, false);
+  assert.ok(tooLong.issues.some((issue) => issue.code === 'exceeds-max-duration'));
 });

@@ -197,7 +197,7 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
             </div>
             <div className="cp-location__row">
               <dt>Official rules</dt>
-              <dd>{policy.bookingRules}</dd>
+              <dd>{policy.ordinaryRules}</dd>
             </div>
             <div className="cp-location__row">
               <dt>Limits</dt>
@@ -241,6 +241,31 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
               </dd>
             </div>
           </dl>
+
+          {policy.ela && (
+            <div>
+              <h4 className="cp-subhead">{policy.ela.label}</h4>
+              {policy.ela.requirements.map((requirement) => (
+                <p key={requirement} className="cp-hint">
+                  {requirement}
+                </p>
+              ))}
+              <p className="cp-hint">{policy.ela.caveat}</p>
+              <p className="cp-panel__foot">
+                Context only: this is not a reservation mode and does not change the ordinary limits above.{' '}
+                <a
+                  className="cp-locations__link"
+                  href={policy.ela.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  HSL Extended Library Access page
+                </a>
+                {policy.ela.verifiedOn ? ` · read ${policy.ela.verifiedOn}` : ' · read date not recorded in this snapshot'}
+              </p>
+            </div>
+          )}
+
           <p className="cp-panel__foot">{policy.statement}</p>
         </>
       ) : (

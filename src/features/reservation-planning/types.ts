@@ -49,6 +49,10 @@ export interface ReservationPolicy {
   eligibility: string;
   /** Official booking rules sentence, verbatim from the snapshot. */
   bookingRules: string;
+  /** Ordinary reservation rules stated explicitly, without the ELA context. */
+  ordinaryRules: string;
+  /** Extended Library Access context; HSL only, documentation only. */
+  ela: ElaScopeNote | null;
   /** Official page the booking rules came from. */
   rulesUrl: string;
   /** Date that rule page was read, separate from the location identity data. */
@@ -59,12 +63,27 @@ export interface ReservationPolicy {
   unoccupiedReleaseRule: string | null;
 }
 
+/**
+ * Extended Library Access context for HSL. Documentation only: it is not a
+ * reservation mode, and it never relaxes ordinary reservation validation.
+ */
+export interface ElaScopeNote {
+  label: string;
+  requirements: readonly string[];
+  /** What the cited page does not settle; kept explicit instead of guessed. */
+  caveat: string;
+  sourceUrl: string;
+  /** Null when this snapshot did not record a read date for the ELA page. */
+  verifiedOn: string | null;
+}
+
 export type ReservationIssueCode =
   | 'missing-policy'
   | 'location-not-reservable'
   | 'purpose-not-eligible'
   | 'missing-time'
   | 'invalid-time'
+  | 'start-in-the-past'
   | 'end-before-start'
   | 'exceeds-max-duration'
   | 'exceeds-advance-window'

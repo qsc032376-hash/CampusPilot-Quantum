@@ -1,5 +1,5 @@
 import { CAMPUS_LOCATIONS, LOCATION_DATA_VERIFIED_ON, OFFICIAL_LOCATION_SNAPSHOTS } from '../campus-locations/index.ts';
-import type { ReservationPolicy } from './types.ts';
+import type { ElaScopeNote, ReservationPolicy } from './types.ts';
 
 /**
  * Reservation policies derived from the verified campus-location snapshot.
@@ -64,6 +64,55 @@ function clause(rules: string, text: string): string | null {
   return rules.includes(text) ? text : null;
 }
 
+/**
+ * Ordinary reservation rules stated explicitly, so the ELA context can be shown
+ * separately instead of being split out of the snapshot sentence.
+ */
+const LIBRARIES_ORDINARY_RULES =
+  'Group study rooms; up to 4 hours; request from the same day up to one week ahead; a group more than 15 minutes late forfeits the reservation.';
+const HSL_ORDINARY_RULES =
+  'Third-floor study rooms; up to 5 people; 2-hour reservations; up to 3 days ahead; bookings can be made online or by phone.';
+
+const ELA_SOURCE_URL = 'https://hsl.osu.edu/using-library/extended-library-access-ela';
+
+/**
+ * Extended Library Access is context, not a booking mode: it does not add a
+ * reservation path, does not relax the ordinary 2-hour limit for ordinary
+ * bookings, and says nothing about whether a user is eligible.
+ */
+const HSL_ELA_NOTE: ElaScopeNote = {
+  label: 'Extended Library Access (ELA)',
+  requirements: [
+    'Requires pre-approved after-hours access.',
+    'Applies to third-floor study spaces only.',
+    'Seating is first come, first served.',
+    'A reservation is not required during these hours.',
+    'The standard two-hour reservation limit does not apply during ELA hours.',
+    'Other study-room rules still apply.',
+  ],
+  caveat:
+    'The source does not state how the 10-minute release rule or consecutive-booking rules apply during ELA hours.',
+  sourceUrl: ELA_SOURCE_URL,
+  verifiedOn: null,
+};
+
+function ordinaryRulesFor(locationId: string): string {
+  switch (locationId) {
+    case 'thompson-library':
+    case '18th-avenue-library':
+    case 'faes-library':
+      return LIBRARIES_ORDINARY_RULES;
+    case 'health-sciences-library':
+      return HSL_ORDINARY_RULES;
+    default:
+      return 'Not verified.';
+  }
+}
+
+function elaFor(locationId: string): ElaScopeNote | null {
+  return locationId === 'health-sciences-library' ? HSL_ELA_NOTE : null;
+}
+
 export const RESERVATION_POLICIES: readonly ReservationPolicy[] = CAMPUS_LOCATIONS.map((location) => {
   const snapshot = OFFICIAL_LOCATION_SNAPSHOTS.find((candidate) => candidate.locationId === location.id);
   const booking = snapshot?.booking;
@@ -80,6 +129,8 @@ export const RESERVATION_POLICIES: readonly ReservationPolicy[] = CAMPUS_LOCATIO
     ...limits,
     eligibility: booking?.eligibility ?? 'Not verified.',
     bookingRules: booking?.rules ?? 'Not verified.',
+    ordinaryRules: ordinaryRulesFor(location.id),
+    ela: elaFor(location.id),
     rulesUrl: booking?.rulesUrl ?? location.infoUrl,
     rulesVerifiedOn: booking?.provenance.verifiedOn ?? LOCATION_DATA_VERIFIED_ON,
     lateArrivalRule: clause(rules, LIBRARIES_LATE_CLAUSE),

@@ -76,8 +76,9 @@ export function validateReservation(
   } else if (end <= start) {
     issues.push({ code: 'end-before-start', message: 'The end time must be after the start time.' });
   } else {
-    if (end <= now.getTime()) {
-      issues.push({ code: 'invalid-time', message: 'That time has already passed.' });
+    // A start exactly at "now" is still bookable; anything earlier is past.
+    if (start < now.getTime()) {
+      issues.push({ code: 'start-in-the-past', message: 'The start time is in the past. Choose a future time.' });
     }
     const durationMinutes = (end - start) / MINUTE;
     if (policy?.maxDurationMinutes != null && durationMinutes > policy.maxDurationMinutes) {
@@ -161,13 +162,18 @@ export function openOfficialSystem(
 ): ReservationPlan {
   const validation = validateReservation(plan.input, plan.policy, now);
   if (plan.state !== 'ready' || !validation.ok) {
+    // Re-validated against the click-time clock: a plan that expired while the
+    // page was open drops back to draft and never reaches openUrl.
     return {
       ...plan,
       validation,
+      state: 'draft',
       navigation: {
         attempted: false,
         succeeded: false,
-        message: 'Validate the plan before opening the official reservation system.',
+        message: validation.ok
+          ? 'Validate the plan before opening the official reservation system.'
+          : validation.issues[0].message,
       },
     };
   }
