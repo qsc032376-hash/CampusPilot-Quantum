@@ -33,10 +33,10 @@ function readyPlan(locationId = 'thompson-library', start = SOON_START, end = SO
   return markReservationReady(plan, NOW);
 }
 
-test('the mandatory live-availability notice is exact', () => {
+test('the mandated Phase 2D fallback wording is exact', () => {
   assert.equal(
     LIVE_AVAILABILITY_NOTICE,
-    'Live room availability is not verified in CampusPilot. Check the official reservation system before relying on a time slot.',
+    'Availability unknown. Please confirm the room and time in the official reservation system.',
   );
 });
 

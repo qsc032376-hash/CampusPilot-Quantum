@@ -16,8 +16,9 @@ import type {
  * "the official system was opened", which is not a booking.
  */
 
+/** Exact Phase 2D fallback wording; do not reword. */
 export const LIVE_AVAILABILITY_NOTICE =
-  'Live room availability is not verified in CampusPilot. Check the official reservation system before relying on a time slot.';
+  'Availability unknown. Please confirm the room and time in the official reservation system.';
 
 const TIMESTAMP_PATTERN = /(Z|[+-]\d{2}:\d{2})$/;
 const MINUTE = 60_000;

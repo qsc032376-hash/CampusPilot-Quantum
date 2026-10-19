@@ -353,9 +353,9 @@ const plannerHtml = renderToStaticMarkup(
   }),
 );
 check(
-  'reservation planner shows the mandatory live-availability notice',
+  'reservation planner shows the exact Phase 2D availability fallback',
   plannerHtml.includes(
-    'Live room availability is not verified in CampusPilot. Check the official reservation system before relying on a time slot.',
+    'Availability unknown. Please confirm the room and time in the official reservation system.',
   ),
   '',
 );

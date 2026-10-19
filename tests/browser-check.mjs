@@ -339,7 +339,7 @@ async function main() {
       '',
     );
     record(
-      'live-availability notice is visible',
+      'Phase 2D availability fallback is visible',
       await evaluate(`(() => {
         const el = document.querySelector('#app .cp-notice');
         if (!el) return false;
@@ -347,7 +347,8 @@ async function main() {
         return (
           box.width > 0 &&
           box.height > 0 &&
-          el.textContent.includes('Live room availability is not verified in CampusPilot')
+          el.textContent.trim() ===
+            'Availability unknown. Please confirm the room and time in the official reservation system.'
         );
       })()`),
       '',
