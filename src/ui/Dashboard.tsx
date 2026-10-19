@@ -7,6 +7,7 @@ import type { TaskDraft } from './components/TaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
+import { RecommendedLocations } from './components/RecommendedLocations.tsx';
 import { createResetState } from './dashboardReset.ts';
 import './ui.css';
 
@@ -83,6 +84,7 @@ export function Dashboard({ request: initialRequest }: DashboardProps) {
         <div className="cp-column">
           <TaskForm key={formKey} request={request} onAdd={handleAddTask} onRemove={handleRemoveTask} />
           <LocationCard block={selectedBlock} request={request} />
+          <RecommendedLocations block={selectedBlock} request={request} />
         </div>
 
         <WeeklySchedule request={request} result={result} selectedId={selectedId} onSelect={setSelectedId} />

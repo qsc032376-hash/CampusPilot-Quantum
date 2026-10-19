@@ -457,6 +457,19 @@
 }
 .cp-locations__name { font-size: 12.5px; font-weight: 700; color: #2b3230; }
 .cp-locations__meta { font-size: 11px; line-height: 1.45; color: var(--cp-soft); }
+.cp-locations__score {
+  float: right;
+  min-width: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8f1ea;
+  color: #2f6b45;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.cp-locations__link { font-size: 11px; font-weight: 700; color: #8f1c2a; text-underline-offset: 2px; }
+.cp-locations__link:focus-visible { outline: 2px solid var(--cp-ink); outline-offset: 2px; }
 
 .cp-foot {
   max-width: 1280px;

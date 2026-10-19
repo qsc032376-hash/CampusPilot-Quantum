@@ -60,8 +60,13 @@ test('the scheduled location comes from the request, not from the recommender', 
   const plan = buildLocationPlan(block('2026-10-19T15:00:00-04:00', '2026-10-19T16:30:00-04:00'), plainRequest);
   assert.equal(plan.scheduled?.id, 'thompson');
   assert.equal(plan.scheduled?.name, 'Thompson Library');
-  // "thompson" is not an id in the verified dataset, so no richer record exists.
-  assert.equal(plan.scheduled?.details, null);
+});
+
+test('a legacy id still resolves the verified record by name', () => {
+  // Older sample data used `thompson`; the verified dataset uses `thompson-library`.
+  const plan = buildLocationPlan(block('2026-10-19T15:00:00-04:00', '2026-10-19T16:30:00-04:00'), plainRequest);
+  assert.equal(plan.scheduled?.details?.id, 'thompson-library');
+  assert.equal(plan.scheduled?.details?.address, '1858 Neil Avenue Mall, Columbus, OH 43210');
 });
 
 test('a matching verified id exposes the location address', () => {
@@ -98,4 +103,15 @@ test('an empty availability dataset yields no match rather than an error', () =>
   );
   assert.equal(plan.status, 'no-match');
   assert.deepEqual(plan.recommendations, []);
+});
+
+test('the sample request uses ids that exist in the verified dataset', async () => {
+  const { sampleRequest } = await import('../src/sample.ts');
+  const { CAMPUS_LOCATIONS } = await import('../src/features/campus-locations/index.ts');
+  const verifiedIds = new Set(CAMPUS_LOCATIONS.map((location) => location.id));
+
+  assert.ok(sampleRequest.locations.length >= 2, 'sample should carry the verified list');
+  for (const location of sampleRequest.locations) {
+    assert.ok(verifiedIds.has(location.id), `${location.id} is not in CAMPUS_LOCATIONS`);
+  }
 });

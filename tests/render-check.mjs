@@ -12,6 +12,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { WeeklySchedule } from './src/ui/components/WeeklySchedule.tsx';
 import { ScheduleResults } from './src/ui/components/ScheduleResults.tsx';
 import { LocationCard } from './src/ui/components/LocationCard.tsx';
+import { RecommendedLocations } from './src/ui/components/RecommendedLocations.tsx';
 import { TaskForm } from './src/ui/components/TaskForm.tsx';
 import { sampleRequest } from './src/sample.ts';
 import { generateMockSchedule } from './src/scheduler.ts';
@@ -162,7 +163,7 @@ const detailedRequest = {
   ...sampleRequest,
   locations: [
     {
-      id: 'thompson',
+      id: 'thompson-library',
       name: 'Thompson Library',
       building: 'Thompson Library',
       room: 'Room 304',
@@ -184,41 +185,72 @@ const plainHtml = renderToStaticMarkup(
   createElement(LocationCard, { block: contractResult.blocks[0], request: sampleRequest }),
 );
 check(
-  'missing location details fall back without inventing values',
-  plainHtml.includes('No building or room details supplied') && !plainHtml.includes('Listed hours'),
+  'sample ids resolve to the verified address',
+  plainHtml.includes('1858 Neil Avenue Mall'),
   '',
 );
 
-// --- multiple campus locations reach the card (the reported bug) ---
+const unknownRequest = {
+  ...sampleRequest,
+  locations: [{ id: 'custom-room', name: 'Unverified Study Room' }],
+};
+const unknownHtml = renderToStaticMarkup(
+  createElement(LocationCard, { block: contractResult.blocks[0], request: unknownRequest }),
+);
+check(
+  'unknown location falls back without inventing details',
+  unknownHtml.includes('No building or room details supplied') && !unknownHtml.includes('Listed hours'),
+  '',
+);
+
+// --- the standalone recommendation list (the reported bug) ---
 const threePmBlock = {
   id: 'study-a',
   taskId: 't1',
   title: 'Study',
   start: '2026-10-19T15:00:00-04:00',
   end: '2026-10-19T16:30:00-04:00',
-  locationId: 'thompson',
+  locationId: 'thompson-library',
 };
-const manyHtml = renderToStaticMarkup(createElement(LocationCard, { block: threePmBlock, request: sampleRequest }));
+const manyHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: threePmBlock, request: sampleRequest }),
+);
 check(
   'several locations are listed for an afternoon block',
-  manyHtml.includes('Also open for this block (5)') &&
+  manyHtml.includes('5 places are listed as open') &&
     manyHtml.includes('18th Avenue Library') &&
     manyHtml.includes('Ohio Union'),
+  '',
+);
+check('each recommendation shows a score', (manyHtml.match(/cp-locations__score/g) || []).length === 5, '');
+check('each recommendation shows a reason', (manyHtml.match(/simulated hours/g) || []).length === 5, '');
+check(
+  'bookable locations link to the official reservation page',
+  manyHtml.includes('Reserve study room') && manyHtml.includes('libraryroombooking.cloud.osu.edu'),
+  '',
+);
+check(
+  'non-bookable locations link to their official page instead',
+  manyHtml.includes('Location details') && manyHtml.includes('ohiounion.osu.edu'),
   '',
 );
 check('recommendation reasons mark hours as simulated', manyHtml.includes('simulated hours'), '');
 check('availability disclaimer is rendered', manyHtml.includes('Availability is simulated'), '');
 
 const oneBlock = { ...threePmBlock, start: '2026-10-19T00:30:00-04:00', end: '2026-10-19T01:00:00-04:00' };
-const oneHtml = renderToStaticMarkup(createElement(LocationCard, { block: oneBlock, request: sampleRequest }));
+const oneHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: oneBlock, request: sampleRequest }),
+);
 check(
   'exactly one location renders a count of one',
-  oneHtml.includes('Also open for this block (1)') && oneHtml.includes('18th Avenue Library'),
+  oneHtml.includes('1 place is listed as open') && oneHtml.includes('18th Avenue Library'),
   '',
 );
 
 const zeroBlock = { ...threePmBlock, start: '2026-10-18T02:00:00-04:00', end: '2026-10-18T03:00:00-04:00' };
-const zeroHtml = renderToStaticMarkup(createElement(LocationCard, { block: zeroBlock, request: sampleRequest }));
+const zeroHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: zeroBlock, request: sampleRequest }),
+);
 check(
   'no open location shows an explicit fallback',
   zeroHtml.includes('No location in the campus list is listed as open'),

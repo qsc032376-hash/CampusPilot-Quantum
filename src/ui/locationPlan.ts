@@ -106,6 +106,18 @@ function findDetails(locationId: string, locations: readonly CampusLocationDetai
 }
 
 /**
+ * Fallback for older data that used a different id for the same building
+ * (for example `thompson` vs `thompson-library`). Id wins; the name is only a
+ * safety net so a mismatched id cannot silently drop the verified record.
+ */
+function findDetailsByName(
+  name: string,
+  locations: readonly CampusLocationDetails[],
+): CampusLocationDetails | null {
+  return locations.find((candidate) => candidate.name === name) ?? null;
+}
+
+/**
  * Builds the plan for one block. Never throws: an unusable window or a
  * recommender error degrades to an explanatory status instead of breaking the
  * card, and a block outside every simulated window simply gets no matches.
@@ -125,7 +137,7 @@ export function buildLocationPlan(
         building: assigned.building,
         room: assigned.room,
         hours: assigned.hours,
-        details: findDetails(assigned.id, locations),
+        details: findDetails(assigned.id, locations) ?? findDetailsByName(assigned.name, locations),
       }
     : null;
 

@@ -273,13 +273,30 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 300));
     const locationText = await evaluate("document.querySelector('#app').innerText");
     record(
-      'location card falls back when optional fields are absent',
-      locationText.includes('Thompson Library') && locationText.includes('No building or room details supplied'),
+      'assigned location shows the verified address',
+      locationText.includes('1858 Neil Avenue Mall'),
+      '',
+    );
+    record(
+      'a standalone recommended-locations panel is rendered',
+      locationText.includes('Recommended study locations'),
       '',
     );
     record(
       'several campus locations are listed after selecting a block',
       ['18th Avenue Library', 'Ohio Union', 'Health Sciences Library'].every((name) => locationText.includes(name)),
+      '',
+    );
+    record(
+      'recommendation links point at official Ohio State pages',
+      await evaluate(
+        "[...document.querySelectorAll('#app .cp-locations__link')].some((a) => a.href.includes('osu.edu'))",
+      ),
+      '',
+    );
+    record(
+      'recommendation scores are rendered',
+      (await evaluate("document.querySelectorAll('#app .cp-locations__score').length")) >= 5,
       '',
     );
     record(
