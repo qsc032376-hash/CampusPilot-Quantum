@@ -55,6 +55,14 @@ export function validateReservation(
       code: 'location-not-reservable',
       message: 'The verified snapshot does not record a bookable study room at this location.',
     });
+  } else if (policy.groupStudyOnly && input.purpose === 'individual-study') {
+    // The official Libraries rules cover "Group study rooms"; individual study
+    // is separate walk-in use, so it cannot be planned as a reservation.
+    issues.push({
+      code: 'purpose-not-eligible',
+      message:
+        'These are group study rooms. Individual study cannot be reserved here; unscheduled rooms are walk-in with group priority.',
+    });
   }
 
   const start = parseTimestamp(input.startIso);

@@ -13,6 +13,7 @@ import {
   verifyOfficialConfirmation,
 } from '../src/features/reservation-planning/index.ts';
 import type { ReservationPlan } from '../src/features/reservation-planning/index.ts';
+import { OFFICIAL_LOCATION_SNAPSHOTS } from '../src/features/campus-locations/index.ts';
 
 /** Fixed clock so the advance-window and past-time checks are deterministic. */
 const NOW = new Date('2026-10-17T12:00:00Z');
@@ -332,4 +333,105 @@ test('editing any field drops the plan back to draft', () => {
   assert.equal(edited.state, 'draft');
   assert.equal(edited.verifiedAt, null);
   assert.equal(edited.userReportedAt, null);
+});
+
+// --- group-study purpose eligibility ---------------------------------------
+
+const GROUP_STUDY_LOCATIONS = ['thompson-library', '18th-avenue-library', 'faes-library'];
+
+test('individual study is rejected at every University Libraries group-study room', () => {
+  for (const locationId of GROUP_STUDY_LOCATIONS) {
+    const policy = findReservationPolicy(locationId);
+    const result = validateReservation(
+      { locationId, startIso: SOON_START, endIso: SOON_END, groupSize: 1, purpose: 'individual-study' },
+      policy,
+      NOW,
+    );
+    assert.equal(result.ok, false, `${locationId} must reject individual study`);
+    assert.ok(result.issues.some((issue) => issue.code === 'purpose-not-eligible'), locationId);
+  }
+});
+
+test('group study, other and unspecified purposes remain valid', () => {
+  for (const locationId of GROUP_STUDY_LOCATIONS) {
+    for (const purpose of ['group-study', '', 'other'] as const) {
+      const result = validateReservation(
+        { locationId, startIso: SOON_START, endIso: SOON_END, groupSize: 2, purpose },
+        findReservationPolicy(locationId),
+        NOW,
+      );
+      assert.equal(result.ok, true, `${locationId} should accept purpose "${purpose}"`);
+    }
+  }
+});
+
+test('the group-only rule is not imposed on the Health Sciences Library', () => {
+  const policy = findReservationPolicy('health-sciences-library');
+  assert.equal(policy?.groupStudyOnly, false);
+  const result = validateReservation(
+    {
+      locationId: 'health-sciences-library',
+      startIso: SOON_START,
+      endIso: SOON_END,
+      groupSize: 1,
+      purpose: 'individual-study',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, true);
+});
+
+test('no numeric minimum group size is invented', () => {
+  for (const locationId of GROUP_STUDY_LOCATIONS) {
+    const result = validateReservation(
+      { locationId, startIso: SOON_START, endIso: SOON_END, groupSize: 1, purpose: 'group-study' },
+      findReservationPolicy(locationId),
+      NOW,
+    );
+    assert.equal(result.ok, true, `${locationId} must accept a group of one`);
+  }
+});
+
+// --- displayed policy rules ------------------------------------------------
+
+test('libraries policies carry the 15-minute forfeiture rule verbatim', () => {
+  for (const locationId of GROUP_STUDY_LOCATIONS) {
+    const policy = findReservationPolicy(locationId);
+    assert.equal(
+      policy?.lateArrivalRule,
+      'a group more than 15 minutes late forfeits the reservation',
+      locationId,
+    );
+    assert.equal(policy?.unoccupiedReleaseRule, null, locationId);
+
+    const snapshot = OFFICIAL_LOCATION_SNAPSHOTS.find((entry) => entry.locationId === locationId);
+    assert.ok(snapshot, locationId);
+    assert.ok(String(snapshot!.booking.rules).includes(String(policy!.lateArrivalRule)));
+    assert.equal(policy?.rulesVerifiedOn, snapshot!.booking.provenance.verifiedOn);
+    assert.equal(policy?.rulesUrl, snapshot!.booking.rulesUrl);
+  }
+});
+
+test('HSL keeps the conditional unoccupied-room wording', () => {
+  const policy = findReservationPolicy('health-sciences-library');
+  assert.equal(policy?.lateArrivalRule, null);
+  assert.equal(policy?.unoccupiedReleaseRule, 'reservations may be released if unoccupied after 10 minutes');
+  // Conditional, not a guaranteed grace period or an automatic cancellation.
+  assert.match(String(policy?.unoccupiedReleaseRule), /may be released/);
+  assert.doesNotMatch(String(policy?.unoccupiedReleaseRule), /automatic|guarantee|will be cancelled/);
+
+  const snapshot = OFFICIAL_LOCATION_SNAPSHOTS.find((entry) => entry.locationId === 'health-sciences-library');
+  assert.ok(String(snapshot!.booking.rules).includes(String(policy!.unoccupiedReleaseRule)));
+});
+
+test('structured limits stay traceable to the official rules text', () => {
+  const libraries = OFFICIAL_LOCATION_SNAPSHOTS.find((entry) => entry.locationId === 'thompson-library');
+  assert.ok(String(libraries!.booking.rules).includes('up to 4 hours'));
+  assert.ok(String(libraries!.booking.rules).includes('one week ahead'));
+
+  const hsl = OFFICIAL_LOCATION_SNAPSHOTS.find((entry) => entry.locationId === 'health-sciences-library');
+  assert.ok(String(hsl!.booking.rules).includes('up to 5 people'));
+  assert.ok(String(hsl!.booking.rules).includes('2-hour'));
+  assert.ok(String(hsl!.booking.rules).includes('3 days ahead'));
 });

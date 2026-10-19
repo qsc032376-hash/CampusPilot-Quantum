@@ -9,13 +9,19 @@
 
 export type ReservationState = 'draft' | 'ready' | 'opened' | 'user-reported' | 'verified';
 
+/**
+ * Structured purpose, not free text: the eligibility rule is about group study,
+ * so the choice must be explicit rather than inferred from keywords.
+ */
+export type ReservationPurpose = '' | 'group-study' | 'individual-study' | 'other';
+
 export interface ReservationInput {
   locationId: string;
   /** ISO 8601 with explicit offset, produced by the campus-time parser. */
   startIso: string;
   endIso: string;
   groupSize: number;
-  purpose: string;
+  purpose: ReservationPurpose;
 }
 
 /**
@@ -37,11 +43,26 @@ export interface ReservationPolicy {
   maxGroupSize: number | null;
   /** Building access rules, kept separate from booking eligibility. */
   buildingAccess: string | null;
+  /** True for the University Libraries group-study rooms. */
+  groupStudyOnly: boolean;
+  /** Official eligibility sentence, verbatim from the snapshot. */
+  eligibility: string;
+  /** Official booking rules sentence, verbatim from the snapshot. */
+  bookingRules: string;
+  /** Official page the booking rules came from. */
+  rulesUrl: string;
+  /** Date that rule page was read, separate from the location identity data. */
+  rulesVerifiedOn: string;
+  /** "More than 15 minutes late forfeits the reservation", when stated. */
+  lateArrivalRule: string | null;
+  /** "may be released if unoccupied after 10 minutes", when stated. */
+  unoccupiedReleaseRule: string | null;
 }
 
 export type ReservationIssueCode =
   | 'missing-policy'
   | 'location-not-reservable'
+  | 'purpose-not-eligible'
   | 'missing-time'
   | 'invalid-time'
   | 'end-before-start'

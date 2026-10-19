@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ReservationPlan, ReservationState } from '../../features/reservation-planning/index.ts';
+import type { ReservationPlan, ReservationPurpose, ReservationState } from '../../features/reservation-planning/index.ts';
 import {
   ADVANCE_WINDOW_MEASUREMENT,
   LIVE_AVAILABILITY_NOTICE,
@@ -78,7 +78,7 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
       startIso: toCampusIso(next.date, next.start),
       endIso: toCampusIso(next.date, next.end),
       groupSize: Number(next.groupSize),
-      purpose: next.purpose,
+      purpose: next.purpose as ReservationPurpose,
     };
   }
 
@@ -156,14 +156,17 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
             />
           </label>
           <label className="cp-field">
-            <span className="cp-field__label">Purpose (optional)</span>
-            <input
+            <span className="cp-field__label">Purpose</span>
+            <select
               className="cp-input"
               value={form.purpose}
               onChange={(event) => update({ purpose: event.target.value })}
-              placeholder="Group project work"
-              autoComplete="off"
-            />
+            >
+              <option value="">Not specified</option>
+              <option value="group-study">Group study</option>
+              <option value="individual-study">Individual study</option>
+              <option value="other">Other</option>
+            </select>
           </label>
         </div>
 
@@ -187,10 +190,14 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
             <div className="cp-location__row">
               <dt>Booking eligibility</dt>
               <dd>
-                {policy.reservable
-                  ? 'Official study-room booking is offered. Room availability is not verified.'
-                  : 'No bookable study room is recorded in the verified snapshot.'}
+                {policy.eligibility}
+                {policy.groupStudyOnly ? ' Group study rooms only; individual study is walk-in, not reservable.' : ''}
+                {policy.reservable ? ' Room availability is not verified.' : ' No bookable study room is recorded.'}
               </dd>
+            </div>
+            <div className="cp-location__row">
+              <dt>Official rules</dt>
+              <dd>{policy.bookingRules}</dd>
             </div>
             <div className="cp-location__row">
               <dt>Limits</dt>
@@ -204,6 +211,18 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
                 {policy.maxGroupSize === null ? 'group limit not verified' : `up to ${policy.maxGroupSize} people`}
               </dd>
             </div>
+            {policy.lateArrivalRule && (
+              <div className="cp-location__row">
+                <dt>Late arrival</dt>
+                <dd>{policy.lateArrivalRule}</dd>
+              </div>
+            )}
+            {policy.unoccupiedReleaseRule && (
+              <div className="cp-location__row">
+                <dt>Unoccupied room</dt>
+                <dd>{policy.unoccupiedReleaseRule}</dd>
+              </div>
+            )}
             <div className="cp-location__row">
               <dt>Building access</dt>
               <dd>{policy.buildingAccess ?? 'Not verified in CampusPilot.'}</dd>
@@ -213,12 +232,12 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
               <dd>Not verified. CampusPilot has no live availability data.</dd>
             </div>
             <div className="cp-location__row">
-              <dt>Source</dt>
+              <dt>Rules source</dt>
               <dd>
-                <a className="cp-locations__link" href={policy.infoUrl} target="_blank" rel="noreferrer noopener">
-                  Official Ohio State page
+                <a className="cp-locations__link" href={policy.rulesUrl} target="_blank" rel="noreferrer noopener">
+                  Official booking rules
                 </a>{' '}
-                · snapshot verified {policy.verifiedOn}
+                · rules read {policy.rulesVerifiedOn} · location data verified {policy.verifiedOn}
               </dd>
             </div>
           </dl>

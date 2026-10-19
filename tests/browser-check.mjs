@@ -371,13 +371,47 @@ async function main() {
       '',
     );
     record(
-      'policy shows its verified source and date',
-      /snapshot verified \d{4}-\d{2}-\d{2}/.test(plannerText) && plannerText.includes('Official Ohio State page'),
+      'policy shows rule-specific source and dates',
+      /rules read \d{4}-\d{2}-\d{2}/.test(plannerText) &&
+        /location data verified \d{4}-\d{2}-\d{2}/.test(plannerText) &&
+        plannerText.includes('Official booking rules'),
+      '',
+    );
+    record(
+      'libraries rooms state the group-only eligibility',
+      plannerText.includes('Group study rooms only; individual study is walk-in'),
+      '',
+    );
+    record(
+      'libraries policy displays the 15-minute forfeiture rule',
+      /late arrival/i.test(plannerText) && plannerText.includes('more than 15 minutes late forfeits the reservation'),
       '',
     );
     record(
       'planner never claims an official confirmation',
       !plannerText.includes('Officially confirmed'),
+      '',
+    );
+
+    await evaluate(`(() => {
+      const select = document.querySelector('#app .cp-reservation select');
+      if (!select) return 'missing';
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'health-sciences-library');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const hslText = await evaluate("document.querySelector('#app .cp-reservation').innerText");
+    record(
+      'HSL displays the conditional unoccupied-room rule',
+      /unoccupied room/i.test(hslText) &&
+        hslText.includes('may be released if unoccupied after 10 minutes'),
+      '',
+    );
+    record(
+      'HSL does not inherit the libraries late-arrival rule',
+      !/more than 15 minutes late/i.test(hslText),
       '',
     );
   } finally {

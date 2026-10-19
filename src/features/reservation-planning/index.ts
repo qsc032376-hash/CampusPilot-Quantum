@@ -5,6 +5,7 @@ export type {
   ReservationIssueCode,
   ReservationPlan,
   ReservationPolicy,
+  ReservationPurpose,
   ReservationState,
   ReservationValidation,
 } from './types.ts';
