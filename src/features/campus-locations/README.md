@@ -45,8 +45,9 @@ import { toScheduleLocations } from './features/campus-locations/index.ts';
 const locations = toScheduleLocations(); // CampusLocation[]
 ```
 
-To wire the real data into the demo, the lead can change `src/sample.ts`
-`locations` to `toScheduleLocations()`. That file was intentionally left alone.
+`src/sample.ts` already uses `toScheduleLocations()` after PR #5 merged, so the
+base location IDs/names are wired into the sample. The dated official hours
+snapshot is separate and is not consumed yet.
 If the shared interface later gains optional `address` / `reservationUrl`
 fields, the local interface can be deleted without changing the data.
 
@@ -63,7 +64,7 @@ src/features/campus-locations/
   README.md                 This document
 tests/
   campus-locations.test.ts          39 node:test checks
-  campus-locations-snapshot.test.ts 17 snapshot checks
+  campus-locations-snapshot.test.ts 19 snapshot checks
 ```
 
 ## Verified locations (2026-10-19)
@@ -144,8 +145,11 @@ These dates are part of the data. Do not describe the hours as permanent.
 - **18th Avenue**: Sun 7:30-24:00; Mon-Fri 24 hours (00:00-07:00 requires a
   current OSU ID); Friday closes at 23:59; Sat 7:30-24:00.
 - **FAES**: Sun closed; Mon-Thu 8:00-18:00; Fri 8:00-17:00; Sat closed.
-- **Health Sciences**: Mon-Thu 7:30-19:30; Fri 7:30-17:30; Sat 10:00-17:30;
-  Sun 12:00-19:30.
+- **Health Sciences service hours**: Mon-Thu 7:30-19:30; Fri 7:30-17:30; Sat
+  10:00-17:30; Sun 12:00-19:30.
+- **Prior Hall public entry**: Mon-Fri 7:30-17:30; weekends and university
+  holidays require badge swipe. Weekday entry after 17:30 is not explicitly
+  described; do not infer it from the longer library service hours.
 - **Ohio Union**: regular term Mon-Fri 8:00-23:00; Sat/Sun 10:00-23:00.
   Academic breaks and summer use 8:00-20:00 weekdays and 10:00-20:00 weekends.
 
@@ -159,8 +163,8 @@ These dates are part of the data. Do not describe the hours as permanent.
   omitted and marked unverified. The building's 24-hour access is **not**
   24-hour room availability.
 - **Health Sciences study rooms**: the HSL page says reservations are during
-  normal operating hours; LibCal shows no separate room-hours row. Room-level
-  hours are unverified; use the LibCal UI.
+  normal operating hours; LibCal has a Study Room Hours row, but every day is a
+  dash (hours not published). Room-level hours are unverified; use the LibCal UI.
 - **FAES study rooms**: no separate FAES room hours were published on the hours
   page. Room availability is only in the Libraries booking UI and was not
   verified.
@@ -357,7 +361,7 @@ From the repository root:
 node --test tests/campus-locations.test.ts tests/campus-locations-snapshot.test.ts
 ```
 
-Expected: **39/39 location checks and 17/17 snapshot checks** (56 total). Both
+Expected: **39/39 location checks and 19/19 snapshot checks** (58 total). Both
 files use Node's built-in test runner and assertions; no test dependency is
 added.
 
@@ -386,12 +390,15 @@ new file. The lead can add it to the script when merging.
 - **Five locations**, Columbus campus only.
 - **Booking eligibility is not checked.** OSU login and room policies are the
   student's responsibility on the official site.
+- **Prior Hall public entry is separate from library service hours.** Weekends
+  and holidays need a badge; weekday entry after 17:30 is not verified.
 - **Ohio Union has no verified individual study-room booking entry point.**
   Only event spaces are documented; this is not a claim that no option exists.
 - **The booking portal is a general entry point**, not a deep link to a specific
   room or date.
-- The module is not yet wired into `src/main.tsx` or `src/sample.ts`; that is a
-  deliberate boundary because the app shell belongs to the technical lead.
+- Base location metadata is used by `src/sample.ts` via
+  `toScheduleLocations()` (merged with PR #5). The dated official hours snapshot
+  is not wired into the recommender or UI yet; D will integrate it later.
 
 ## Sources (read 2026-10-19)
 

@@ -16,6 +16,7 @@ export {
 
 export type {
   BookingSnapshot,
+  BuildingAccessSnapshot,
   HoursSnapshot,
   LocationSnapshot,
 } from './officialSnapshot.ts';

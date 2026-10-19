@@ -15,7 +15,7 @@ import type { DataProvenance } from './types.ts';
  */
 
 export interface HoursSnapshot {
-  scope: 'building' | 'study-space';
+  scope: 'building' | 'service' | 'study-space';
   label: string;
   /** First local date the snapshot applies to, inclusive (YYYY-MM-DD). */
   appliesFrom: string;
@@ -33,9 +33,25 @@ export interface BookingSnapshot {
   provenance: DataProvenance;
 }
 
+export interface BuildingAccessSnapshot {
+  label: string;
+  appliesFrom: string;
+  appliesTo: string;
+  timeZone: 'America/New_York';
+  /** Hours the public can enter without a badge; empty means no public entry recorded. */
+  publicEntry: Record<DayOfWeek, readonly TimeRange[]>;
+  /** Days for which the official page explicitly requires a badge. */
+  badgeRequiredDays: readonly DayOfWeek[];
+  provenance: DataProvenance;
+  /** What the source does not say, so callers do not infer access rules. */
+  note: string;
+}
+
 export interface LocationSnapshot {
   locationId: string;
   buildingHours: HoursSnapshot;
+  /** Present only when official public building-entry rules were verified. */
+  buildingAccess?: BuildingAccessSnapshot;
   /** Present only when official room-specific hours were verified. */
   studySpaceHours?: readonly HoursSnapshot[];
   booking: BookingSnapshot;
@@ -186,13 +202,13 @@ export const OFFICIAL_LOCATION_SNAPSHOTS: readonly LocationSnapshot[] = [
         Tue: at(0, 1440),
         Wed: at(0, 1440),
         Thu: at(0, 1440),
-        Fri: at(0, 1440),
+        Fri: at(0, 1439),
         Sat: at(450, 1440),
       },
       provenance: official(
         'Ohio State University Libraries',
         LIBRARIES_HOURS_URL,
-        'Weekly snapshot for 2026-10-18 to 2026-10-24. The page says Friday closes at 11:59 p.m.; modeled as end-of-day 1440. Not live.',
+        'Weekly snapshot for 2026-10-18 to 2026-10-24. The page says Friday closes at 11:59 p.m., so the end is stored as 1439 (23:59); the 23:59-24:00 minute is outside the window. Not live.',
       ),
     },
     booking: librariesBooking,
@@ -202,8 +218,8 @@ export const OFFICIAL_LOCATION_SNAPSHOTS: readonly LocationSnapshot[] = [
   {
     locationId: 'health-sciences-library',
     buildingHours: {
-      scope: 'building',
-      label: 'Health Sciences Library building hours',
+      scope: 'service',
+      label: 'Health Sciences Library service hours',
       appliesFrom: '2026-10-19',
       appliesTo: '2026-10-25',
       timeZone: 'America/New_York',
@@ -219,12 +235,34 @@ export const OFFICIAL_LOCATION_SNAPSHOTS: readonly LocationSnapshot[] = [
       provenance: official(
         'Ohio State University Health Sciences Library',
         HSL_HOURS_URL,
-        'Weekly snapshot for 2026-10-19 to 2026-10-25 from LibCal. Holidays and breaks differ; not live.',
+        'Library service hours for 2026-10-19 to 2026-10-25 from LibCal. These are not Prior Hall public building-access hours. Not live.',
       ),
+    },
+    buildingAccess: {
+      label: 'Prior Hall public entry',
+      appliesFrom: '2026-10-19',
+      appliesTo: '2026-10-25',
+      timeZone: 'America/New_York',
+      publicEntry: {
+        Sun: closed,
+        Mon: at(450, 1050),
+        Tue: at(450, 1050),
+        Wed: at(450, 1050),
+        Thu: at(450, 1050),
+        Fri: at(450, 1050),
+        Sat: closed,
+      },
+      badgeRequiredDays: ['Sat', 'Sun'],
+      provenance: official(
+        'Ohio State University Health Sciences Library',
+        'https://hsl.osu.edu/using-library/visit/location-hours-and-parking',
+        'Prior Hall public access: Monday-Friday 7:30-17:30; weekends and university holidays require badge swipe. Snapshot week; not live.',
+      ),
+      note: 'Public entry after 17:30 on weekdays is not explicitly described on the page. Library service hours continue to 19:30 Monday-Thursday; do not infer building access from them.',
     },
     booking: hslBooking,
     notes:
-      'The HSL page says rooms are reservable during normal operating hours. LibCal shows no separate study-room hours row, so studySpaceHours is omitted and room-level hours remain unverified; use the LibCal calendar.',
+      'Library service hours and Prior Hall public entry are separate; see buildingAccess. LibCal has a Study Room Hours row, but every day is a dash (hours not published), so studySpaceHours is omitted and room-level hours remain unverified; use the LibCal calendar.',
   },
   {
     locationId: 'faes-library',

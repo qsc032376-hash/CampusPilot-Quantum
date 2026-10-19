@@ -13,6 +13,14 @@ import type { HoursSnapshot } from '../src/features/campus-locations/index.ts';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+function covers(
+  ranges: readonly { startMinutes: number; endMinutes: number }[],
+  startMinutes: number,
+  endMinutes: number,
+): boolean {
+  return ranges.some((range) => range.startMinutes <= startMinutes && endMinutes <= range.endMinutes);
+}
+
 function allHours(): readonly HoursSnapshot[] {
   return OFFICIAL_LOCATION_SNAPSHOTS.flatMap((snapshot) => [
     snapshot.buildingHours,
@@ -77,6 +85,11 @@ test('S5. verified date and status are recorded for every snapshot fact', () => 
     assert.equal(snapshot.booking.provenance.verifiedOn, OFFICIAL_SNAPSHOT_VERIFIED_ON);
     assert.equal(snapshot.booking.provenance.isLive, false);
     assert.ok(['official-snapshot', 'unverified'].includes(snapshot.booking.provenance.status));
+    if (snapshot.buildingAccess) {
+      assert.equal(snapshot.buildingAccess.provenance.verifiedOn, OFFICIAL_SNAPSHOT_VERIFIED_ON);
+      assert.equal(snapshot.buildingAccess.provenance.isLive, false);
+      assert.equal(snapshot.buildingAccess.provenance.status, 'official-snapshot');
+    }
   }
 });
 
@@ -86,6 +99,13 @@ test('S6. every hours snapshot has a valid applicable date range and time zone',
     assert.match(hours.appliesTo, ISO_DATE);
     assert.ok(hours.appliesFrom <= hours.appliesTo);
     assert.equal(hours.timeZone, 'America/New_York');
+  }
+  for (const snapshot of OFFICIAL_LOCATION_SNAPSHOTS) {
+    if (!snapshot.buildingAccess) continue;
+    assert.match(snapshot.buildingAccess.appliesFrom, ISO_DATE);
+    assert.match(snapshot.buildingAccess.appliesTo, ISO_DATE);
+    assert.ok(snapshot.buildingAccess.appliesFrom <= snapshot.buildingAccess.appliesTo);
+    assert.equal(snapshot.buildingAccess.timeZone, 'America/New_York');
   }
 });
 
@@ -202,4 +222,49 @@ test('S17. FAES keeps the service name and records the official name', () => {
   assert.equal(faes.name, 'FAES Library & Student Success Center');
   assert.equal(faes.officialName, 'Food, Agricultural & Environmental Sciences Library');
   assert.match(faes.address, /Agricultural Administration Building/);
+});
+
+test('S18. 18th Avenue Friday closes at 23:59, not midnight', () => {
+  const avenue = OFFICIAL_LOCATION_SNAPSHOTS.find((item) => item.locationId === '18th-avenue-library');
+  assert.ok(avenue);
+  const friday = avenue.buildingHours.weekly.Fri;
+  assert.deepEqual(friday, [{ startMinutes: 0, endMinutes: 1439 }]);
+
+  // 2026-10-23 (Friday) 23:59-24:00 must not be covered.
+  assert.equal(covers(friday, 1439, 1440), false);
+  assert.equal(covers(friday, 1438, 1439), true);
+
+  // True midnight closures elsewhere are unchanged.
+  const thompson = OFFICIAL_LOCATION_SNAPSHOTS.find((item) => item.locationId === 'thompson-library');
+  assert.ok(thompson);
+  assert.equal(thompson.buildingHours.weekly.Mon[0]?.endMinutes, 1440);
+  assert.equal(avenue.buildingHours.weekly.Mon[0]?.endMinutes, 1440);
+  assert.equal(covers(avenue.buildingHours.weekly.Mon, 1439, 1440), true);
+});
+
+test('S19. HSL service hours stay separate from Prior Hall public entry', () => {
+  const hsl = OFFICIAL_LOCATION_SNAPSHOTS.find((item) => item.locationId === 'health-sciences-library');
+  assert.ok(hsl);
+  assert.equal(hsl.buildingHours.scope, 'service');
+  assert.equal(hsl.buildingHours.label, 'Health Sciences Library service hours');
+  assert.deepEqual(hsl.buildingHours.weekly.Mon, [{ startMinutes: 450, endMinutes: 1170 }]);
+
+  const access = hsl.buildingAccess;
+  assert.ok(access);
+  assert.equal(access.label, 'Prior Hall public entry');
+  assert.deepEqual(access.publicEntry.Mon, [{ startMinutes: 450, endMinutes: 1050 }]);
+  assert.deepEqual(access.publicEntry.Sat, []);
+  assert.deepEqual(access.publicEntry.Sun, []);
+  assert.deepEqual([...access.badgeRequiredDays].sort(), ['Sat', 'Sun']);
+
+  // The library service day is not truncated to the public-entry time.
+  assert.ok(access.publicEntry.Mon[0]!.endMinutes < hsl.buildingHours.weekly.Mon[0]!.endMinutes);
+  assert.match(access.note, /not explicitly described/i);
+  assert.match(
+    access.provenance.sourceUrl,
+    /hsl\.osu\.edu\/using-library\/visit\/location-hours-and-parking/,
+  );
+  assert.equal(access.provenance.verifiedOn, OFFICIAL_SNAPSHOT_VERIFIED_ON);
+  assert.equal(access.provenance.isLive, false);
+  assert.match(hsl.notes ?? '', /Study Room Hours row/i);
 });
