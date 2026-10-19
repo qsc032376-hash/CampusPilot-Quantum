@@ -42,12 +42,19 @@ const clockPartsFormatter = new Intl.DateTimeFormat('en-US', {
   hourCycle: 'h23',
 });
 
-const calendarDayFormatter = new Intl.DateTimeFormat('en-CA', {
+const datePartsFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: CAMPUS_TIME_ZONE,
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
 });
+
+/** Whole days since the epoch for a campus calendar date. */
+function calendarDayNumber(iso: string): number {
+  const parts = datePartsFormatter.formatToParts(new Date(iso));
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? '0');
+  return Math.floor(Date.UTC(value('year'), value('month') - 1, value('day')) / 86_400_000);
+}
 
 /** Why a block cannot be expressed as a campus-time window. */
 export type WindowIssue = 'invalid-range' | 'not-minute-aligned' | 'crosses-dst' | 'crosses-midnight';
@@ -97,12 +104,19 @@ export function toStudyBlockWindow(startIso: string, endIso: string): StudyBlock
     return { ok: false, reason: 'invalid-range' };
   }
 
-  if (calendarDayFormatter.format(new Date(start)) !== calendarDayFormatter.format(new Date(end))) {
-    return { ok: false, reason: 'crosses-midnight' };
+  const startDay = calendarDayNumber(startIso);
+  const endDay = calendarDayNumber(endIso);
+  const startMinutes = minuteOfDay(startIso);
+  let endMinutes = minuteOfDay(endIso);
+
+  if (startDay !== endDay) {
+    // Midnight at the end of the start date is representable as 1440 and is not
+    // a real midnight crossing.
+    const endsAtMidnight = endMinutes === 0 && endDay === startDay + 1;
+    if (!endsAtMidnight) return { ok: false, reason: 'crosses-midnight' };
+    endMinutes = 1440;
   }
 
-  const startMinutes = minuteOfDay(startIso);
-  const endMinutes = minuteOfDay(endIso);
   if (endMinutes <= startMinutes) {
     return { ok: false, reason: 'invalid-range' };
   }

@@ -39,6 +39,13 @@ test('a block crossing midnight is rejected, not silently wrapped', () => {
   });
 });
 
+test('a block ending exactly at midnight maps to endMinutes 1440', () => {
+  assert.deepEqual(toStudyBlockWindow('2026-10-19T23:30:00-04:00', '2026-10-20T00:00:00-04:00'), {
+    ok: true,
+    window: { day: 'Mon', startMinutes: 1410, endMinutes: 1440 },
+  });
+});
+
 test('an end before the start is rejected', () => {
   assert.deepEqual(toStudyBlockWindow('2026-10-19T16:30:00-04:00', '2026-10-19T15:00:00-04:00'), {
     ok: false,
