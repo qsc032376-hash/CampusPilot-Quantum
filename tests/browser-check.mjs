@@ -331,6 +331,55 @@ async function main() {
       locationText.includes('simulated hours') && locationText.includes('Availability is simulated'),
       '',
     );
+
+    // --- reservation planning workflow ---
+    record(
+      'reservation planner panel is rendered',
+      await evaluate("!!document.querySelector('#app .cp-reservation')"),
+      '',
+    );
+    record(
+      'live-availability notice is visible',
+      await evaluate(`(() => {
+        const el = document.querySelector('#app .cp-notice');
+        if (!el) return false;
+        const box = el.getBoundingClientRect();
+        return (
+          box.width > 0 &&
+          box.height > 0 &&
+          el.textContent.includes('Live room availability is not verified in CampusPilot')
+        );
+      })()`),
+      '',
+    );
+
+    await evaluate(`(() => {
+      const select = document.querySelector('#app .cp-reservation select');
+      if (!select) return 'missing';
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'thompson-library');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const plannerText = await evaluate("document.querySelector('#app .cp-reservation').innerText");
+    const plannerLower = plannerText.toLowerCase();
+    record(
+      'verified policy separates eligibility, access and availability',
+      ['booking eligibility', 'building access', 'room availability'].every((label) => plannerLower.includes(label)),
+      '',
+    );
+    record(
+      'policy shows its verified source and date',
+      plannerText.includes('snapshot verified 2026-10-17') && plannerText.includes('Official Ohio State page'),
+      '',
+    );
+    record(
+      'planner never claims an official confirmation',
+      !plannerText.includes('Officially confirmed'),
+      '',
+    );
   } finally {
     if (socket) socket.close();
     chrome.kill();

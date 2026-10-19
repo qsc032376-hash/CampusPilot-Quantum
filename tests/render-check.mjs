@@ -13,6 +13,7 @@ import { WeeklySchedule } from './src/ui/components/WeeklySchedule.tsx';
 import { ScheduleResults } from './src/ui/components/ScheduleResults.tsx';
 import { LocationCard } from './src/ui/components/LocationCard.tsx';
 import { RecommendedLocations } from './src/ui/components/RecommendedLocations.tsx';
+import { ReservationPlanner } from './src/ui/components/ReservationPlanner.tsx';
 import { TaskForm } from './src/ui/components/TaskForm.tsx';
 import { sampleRequest } from './src/sample.ts';
 import { generateMockSchedule } from './src/scheduler.ts';
@@ -343,6 +344,28 @@ check(
   formHtml.includes('CSE 201') && formHtml.includes('cp-tag--high'),
   '',
 );
+
+// --- reservation planning ---
+const plannerHtml = renderToStaticMarkup(
+  createElement(ReservationPlanner, {
+    now: () => new Date('2026-10-17T12:00:00Z'),
+    openUrl: () => false,
+  }),
+);
+check(
+  'reservation planner shows the mandatory live-availability notice',
+  plannerHtml.includes(
+    'Live room availability is not verified in CampusPilot. Check the official reservation system before relying on a time slot.',
+  ),
+  '',
+);
+check('reservation planner starts in the draft state', plannerHtml.includes('Draft'), '');
+check(
+  'reservation planner asks for a location before showing policy',
+  plannerHtml.includes('Choose a location to see its verified reservation policy.'),
+  '',
+);
+check('reservation planner makes no confirmation claim', !plannerHtml.includes('Officially confirmed'), '');
 
 const failed = results.filter((ok) => !ok).length;
 console.log('\\nSUMMARY ' + (results.length - failed) + '/' + results.length + ' passed');

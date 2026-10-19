@@ -1,0 +1,267 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  LIVE_AVAILABILITY_NOTICE,
+  applyReservationInput,
+  createReservationPlan,
+  findReservationPolicy,
+  markReservationReady,
+  openOfficialSystem,
+  reportUserBooking,
+  validateReservation,
+  verifyOfficialConfirmation,
+} from '../src/features/reservation-planning/index.ts';
+import type { ReservationPlan } from '../src/features/reservation-planning/index.ts';
+
+/** Fixed clock so the advance-window and past-time checks are deterministic. */
+const NOW = new Date('2026-10-17T12:00:00Z');
+const SOON_START = '2026-10-19T15:00:00-04:00';
+const SOON_END = '2026-10-19T16:00:00-04:00';
+
+function planFor(locationId: string): ReservationPlan {
+  return createReservationPlan(findReservationPolicy(locationId), NOW);
+}
+
+function readyPlan(locationId = 'thompson-library', start = SOON_START, end = SOON_END, groupSize = 2): ReservationPlan {
+  const plan = applyReservationInput(
+    planFor(locationId),
+    { locationId, startIso: start, endIso: end, groupSize, purpose: '' },
+    NOW,
+  );
+  return markReservationReady(plan, NOW);
+}
+
+test('the mandatory live-availability notice is exact', () => {
+  assert.equal(
+    LIVE_AVAILABILITY_NOTICE,
+    'Live room availability is not verified in CampusPilot. Check the official reservation system before relying on a time slot.',
+  );
+});
+
+test('an end time before the start time is rejected', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const result = validateReservation(
+    { locationId: 'thompson-library', startIso: SOON_END, endIso: SOON_START, groupSize: 2, purpose: '' },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'end-before-start'));
+});
+
+test('a time in the past is rejected', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const result = validateReservation(
+    {
+      locationId: 'thompson-library',
+      startIso: '2026-10-10T15:00:00-04:00',
+      endIso: '2026-10-10T16:00:00-04:00',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'invalid-time'));
+});
+
+test('the verified four-hour limit is enforced', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const result = validateReservation(
+    {
+      locationId: 'thompson-library',
+      startIso: '2026-10-19T10:00:00-04:00',
+      endIso: '2026-10-19T15:00:00-04:00',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'exceeds-max-duration'));
+});
+
+test('the verified seven-day advance window is enforced', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const result = validateReservation(
+    {
+      locationId: 'thompson-library',
+      startIso: '2026-11-10T15:00:00-05:00',
+      endIso: '2026-11-10T16:00:00-05:00',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'exceeds-advance-window'));
+});
+
+test('the Health Sciences group limit of five people is enforced', () => {
+  const policy = findReservationPolicy('health-sciences-library');
+  const tooBig = validateReservation(
+    {
+      locationId: 'health-sciences-library',
+      startIso: SOON_START,
+      endIso: SOON_END,
+      groupSize: 6,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(tooBig.ok, false);
+  assert.ok(tooBig.issues.some((issue) => issue.code === 'exceeds-max-group-size'));
+
+  const fits = validateReservation(
+    { locationId: 'health-sciences-library', startIso: SOON_START, endIso: SOON_END, groupSize: 5, purpose: '' },
+    policy,
+    NOW,
+  );
+  assert.equal(fits.ok, true);
+});
+
+test('unverified limits are not invented', () => {
+  // FAES records the booking system only, so no duration or advance limit exists.
+  const policy = findReservationPolicy('faes-library');
+  assert.equal(policy?.maxDurationMinutes, null);
+  assert.equal(policy?.maxAdvanceDays, null);
+  const result = validateReservation(
+    {
+      locationId: 'faes-library',
+      startIso: '2026-10-19T09:00:00-04:00',
+      endIso: '2026-10-19T14:00:00-04:00',
+      groupSize: 8,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(result.ok, true);
+});
+
+test('a location with no bookable rooms is blocked', () => {
+  const result = validateReservation(
+    { locationId: 'ohio-union', startIso: SOON_START, endIso: SOON_END, groupSize: 2, purpose: '' },
+    findReservationPolicy('ohio-union'),
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'location-not-reservable'));
+});
+
+test('a location without any policy record is blocked', () => {
+  const result = validateReservation(
+    { locationId: 'unknown-room', startIso: SOON_START, endIso: SOON_END, groupSize: 2, purpose: '' },
+    findReservationPolicy('unknown-room'),
+    NOW,
+  );
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((issue) => issue.code === 'missing-policy'));
+});
+
+test('an invalid group size is rejected', () => {
+  const policy = findReservationPolicy('thompson-library');
+  for (const groupSize of [0, -1, 2.5, 999]) {
+    const result = validateReservation(
+      { locationId: 'thompson-library', startIso: SOON_START, endIso: SOON_END, groupSize, purpose: '' },
+      policy,
+      NOW,
+    );
+    assert.equal(result.ok, false, `groupSize ${groupSize} should be rejected`);
+    assert.ok(result.issues.some((issue) => issue.code === 'invalid-group-size'));
+  }
+});
+
+test('a valid plan becomes ready, not verified', () => {
+  const plan = readyPlan();
+  assert.equal(plan.state, 'ready');
+  assert.equal(plan.verifiedAt, null);
+});
+
+test('opening the official system records opened, never confirmed', () => {
+  let openedUrl = '';
+  const plan = openOfficialSystem(
+    readyPlan(),
+    (url) => {
+      openedUrl = url;
+      return true;
+    },
+    NOW,
+  );
+  assert.equal(openedUrl, 'https://libraryroombooking.cloud.osu.edu/');
+  assert.equal(plan.state, 'opened');
+  assert.equal(plan.navigation.succeeded, true);
+  assert.equal(plan.verifiedAt, null);
+});
+
+test('a blocked navigation keeps the plan ready and reports the failure', () => {
+  const plan = openOfficialSystem(readyPlan(), () => false, NOW);
+  assert.equal(plan.state, 'ready');
+  assert.equal(plan.navigation.attempted, true);
+  assert.equal(plan.navigation.succeeded, false);
+  assert.match(String(plan.navigation.message), /could not open/i);
+});
+
+test('a throwing navigation is handled without crashing', () => {
+  const plan = openOfficialSystem(
+    readyPlan(),
+    () => {
+      throw new Error('popup blocked');
+    },
+    NOW,
+  );
+  assert.equal(plan.state, 'ready');
+  assert.equal(plan.navigation.succeeded, false);
+});
+
+test('opening is refused while the plan is still a draft', () => {
+  const plan = openOfficialSystem(planFor('thompson-library'), () => true, NOW);
+  assert.equal(plan.state, 'draft');
+  assert.equal(plan.navigation.attempted, false);
+});
+
+test('the full state chain stops at a user report', () => {
+  const opened = openOfficialSystem(readyPlan(), () => true, NOW);
+  const reported = reportUserBooking(opened, '2026-10-19T20:00:00.000Z');
+  assert.equal(reported.state, 'user-reported');
+  assert.equal(reported.userReportedAt, '2026-10-19T20:00:00.000Z');
+  assert.equal(reported.verifiedAt, null);
+});
+
+test('user reporting is ignored unless the official system was opened', () => {
+  const plan = reportUserBooking(readyPlan(), '2026-10-19T20:00:00.000Z');
+  assert.equal(plan.state, 'ready');
+  assert.equal(plan.userReportedAt, null);
+});
+
+test('verification requires a trustworthy confirmation reference', () => {
+  const reported = reportUserBooking(openOfficialSystem(readyPlan(), () => true, NOW), '2026-10-19T20:00:00.000Z');
+  assert.throws(() => verifyOfficialConfirmation(reported, null, '2026-10-19T20:05:00.000Z'));
+  assert.throws(() =>
+    verifyOfficialConfirmation(
+      reported,
+      { source: 'official-confirmation', reference: '   ' },
+      '2026-10-19T20:05:00.000Z',
+    ),
+  );
+
+  const verified = verifyOfficialConfirmation(
+    reported,
+    { source: 'official-confirmation', reference: 'OSU-CONF-123' },
+    '2026-10-19T20:05:00.000Z',
+  );
+  assert.equal(verified.state, 'verified');
+  assert.equal(verified.verifiedAt, '2026-10-19T20:05:00.000Z');
+});
+
+test('editing any field drops the plan back to draft', () => {
+  const ready = readyPlan();
+  const edited = applyReservationInput(ready, { groupSize: 3 }, NOW);
+  assert.equal(edited.state, 'draft');
+  assert.equal(edited.verifiedAt, null);
+  assert.equal(edited.userReportedAt, null);
+});

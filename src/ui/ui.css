@@ -468,6 +468,22 @@
 }
 .cp-locations__name { font-size: 12.5px; font-weight: 700; color: #2b3230; }
 .cp-locations__meta { font-size: 11px; line-height: 1.45; color: var(--cp-soft); }
+
+/* ---------- reservation planning ---------- */
+.cp-reservation { max-width: 1280px; margin: 0 auto; padding: 0 24px 10px; }
+.cp-notice {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  background: #fffbeb;
+  border: 1px solid #f3e3b8;
+  border-left: 3px solid #b45309;
+  border-radius: 0 8px 8px 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #7a4d06;
+}
+.cp-policy { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 0; }
+.cp-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; align-items: flex-start; }
 .cp-locations__score {
   float: right;
   min-width: 22px;
