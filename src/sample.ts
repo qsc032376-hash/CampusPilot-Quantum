@@ -1,4 +1,5 @@
 import type { ScheduleRequest } from './types.ts';
+import { toScheduleLocations } from './features/campus-locations/index.ts';
 
 export const sampleRequest: ScheduleRequest = {
   windowStart: '2026-10-19T09:00:00-04:00',
@@ -19,5 +20,8 @@ export const sampleRequest: ScheduleRequest = {
     { id: 'writing', title: 'Outline writing assignment', durationMinutes: 60, dueAt: '2026-10-19T17:00:00-04:00' },
     { id: 'reading', title: 'Complete extended reading', durationMinutes: 180, dueAt: '2026-10-19T17:00:00-04:00' },
   ],
-  locations: [{ id: 'thompson', name: 'Thompson Library' }],
+  // Verified campus locations, mapped to the exact { id, name } shape the
+  // scheduler expects so sample ids match the real dataset (thompson-library,
+  // not a hand-written "thompson").
+  locations: toScheduleLocations(),
 };

@@ -445,6 +445,43 @@
 }
 .cp-location__row dd { margin: 0; font-size: 12.5px; color: #3b423f; overflow-wrap: anywhere; }
 
+.cp-location__status {
+  margin: 10px 0 0;
+  padding: 7px 10px;
+  background: var(--cp-tint);
+  border-left: 3px solid #cfd1c8;
+  border-radius: 0 8px 8px 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--cp-soft);
+}
+
+.cp-locations { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; }
+.cp-locations__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  background: var(--cp-tint);
+  border: 1px solid var(--cp-line);
+  border-radius: 8px;
+}
+.cp-locations__name { font-size: 12.5px; font-weight: 700; color: #2b3230; }
+.cp-locations__meta { font-size: 11px; line-height: 1.45; color: var(--cp-soft); }
+.cp-locations__score {
+  float: right;
+  min-width: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e8f1ea;
+  color: #2f6b45;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+}
+.cp-locations__link { font-size: 11px; font-weight: 700; color: #8f1c2a; text-underline-offset: 2px; }
+.cp-locations__link:focus-visible { outline: 2px solid var(--cp-ink); outline-offset: 2px; }
+
 .cp-foot {
   max-width: 1280px;
   margin: 0 auto;
