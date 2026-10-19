@@ -12,17 +12,22 @@ import type {
   SimulatedAvailability,
   StudyBlockWindow,
 } from '../features/campus-locations/index.ts';
-import { CAMPUS_TIME_ZONE } from './format.ts';
+import { CAMPUS_TIME_ZONE, formatOffset } from './format.ts';
 
 /**
- * Turns one scheduled study block into everything the "Where" card needs.
+ * Turns one scheduled study block into everything the "Where" / recommendation
+ * panels need.
  *
  * The scheduler assigns a single location to a block and this module never
  * changes that. What it adds is the list of other campus locations that the
- * shared recommender reports as open for the same block, so the UI can show
- * the five verified places instead of just the assigned one.
+ * shared recommender reports as open for the same block.
  *
- * Everything here is pure: no network, no clock reads, no booking.
+ * Time conversion is deliberately strict. The recommender works in whole
+ * campus-time minutes on one calendar day, so a block is only convertible when
+ * it is minute-aligned, stays inside one local day, and does not span a
+ * daylight-saving offset change. Anything else is rejected with a reason the UI
+ * can explain, rather than being silently rounded into a claim that the place
+ * is open.
  */
 
 const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
@@ -44,6 +49,13 @@ const calendarDayFormatter = new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 });
 
+/** Why a block cannot be expressed as a campus-time window. */
+export type WindowIssue = 'invalid-range' | 'not-minute-aligned' | 'crosses-dst' | 'crosses-midnight';
+
+export type StudyBlockWindowResult =
+  | { ok: true; window: StudyBlockWindow }
+  | { ok: false; reason: WindowIssue };
+
 function minuteOfDay(iso: string): number {
   const parts = clockPartsFormatter.formatToParts(new Date(iso));
   const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
@@ -52,26 +64,50 @@ function minuteOfDay(iso: string): number {
 }
 
 /**
- * Campus-time window for the recommender, or null when it cannot be described
- * as a single calendar day (the recommender rejects cross-midnight blocks).
+ * Campus-time window for the recommender.
+ *
+ * Rejection rules, in order:
+ * - end is not after start, or a timestamp is unparseable -> `invalid-range`
+ * - start or end carries seconds/milliseconds -> `not-minute-aligned`
+ *   (truncating would claim the place is open for time it does not cover)
+ * - the UTC offset differs between start and end -> `crosses-dst`
+ *   (wall-clock length would no longer equal real elapsed time)
+ * - the two timestamps fall on different campus dates -> `crosses-midnight`
+ *
+ * A block that sits inside the repeated fall-back hour with the same offset
+ * throughout is still a normal window and is accepted.
  */
-export function toStudyBlockWindow(startIso: string, endIso: string): StudyBlockWindow | null {
+export function toStudyBlockWindow(startIso: string, endIso: string): StudyBlockWindowResult {
   const start = Date.parse(startIso);
   const end = Date.parse(endIso);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return { ok: false, reason: 'invalid-range' };
+  }
+
+  if (Math.abs(start % 60_000) !== 0 || Math.abs(end % 60_000) !== 0) {
+    return { ok: false, reason: 'not-minute-aligned' };
+  }
+
+  if (formatOffset(start) !== formatOffset(end)) {
+    return { ok: false, reason: 'crosses-dst' };
+  }
 
   const day = weekdayFormatter.format(new Date(start));
-  if (!DAYS_OF_WEEK.includes(day as DayOfWeek)) return null;
+  if (!DAYS_OF_WEEK.includes(day as DayOfWeek)) {
+    return { ok: false, reason: 'invalid-range' };
+  }
 
   if (calendarDayFormatter.format(new Date(start)) !== calendarDayFormatter.format(new Date(end))) {
-    return null;
+    return { ok: false, reason: 'crosses-midnight' };
   }
 
   const startMinutes = minuteOfDay(startIso);
   const endMinutes = minuteOfDay(endIso);
-  if (endMinutes <= startMinutes) return null;
+  if (endMinutes <= startMinutes) {
+    return { ok: false, reason: 'invalid-range' };
+  }
 
-  return { day: day as DayOfWeek, startMinutes, endMinutes };
+  return { ok: true, window: { day: day as DayOfWeek, startMinutes, endMinutes } };
 }
 
 export interface ScheduledLocationView {
@@ -84,11 +120,18 @@ export interface ScheduledLocationView {
   details: CampusLocationDetails | null;
 }
 
-export type LocationPlanStatus = 'ok' | 'no-match' | 'unavailable-window';
+export type LocationPlanStatus = 'ok' | 'no-match' | WindowIssue;
 
 export interface LocationPlan {
-  /** The location the scheduler put this block in. */
+  /** The location the scheduler put this block in. Never re-assigned here. */
   scheduled: ScheduledLocationView | null;
+  /** Canonical id from the verified dataset when known, otherwise the request id. */
+  canonicalScheduledId: string | null;
+  /**
+   * True only when the scheduler's location also appears in the recommendation
+   * list, i.e. it passed the open-hours check for this block.
+   */
+  scheduledIsRecommended: boolean;
   window: StudyBlockWindow | null;
   recommendations: readonly LocationRecommendation[];
   status: LocationPlanStatus;
@@ -141,20 +184,42 @@ export function buildLocationPlan(
       }
     : null;
 
-  const window = toStudyBlockWindow(block.start, block.end);
-  if (!window) {
-    return { scheduled, window: null, recommendations: [], status: 'unavailable-window' };
+  const canonicalScheduledId = scheduled?.details?.id ?? scheduled?.id ?? null;
+  const windowResult = toStudyBlockWindow(block.start, block.end);
+
+  if (!windowResult.ok) {
+    return {
+      scheduled,
+      canonicalScheduledId,
+      scheduledIsRecommended: false,
+      window: null,
+      recommendations: [],
+      status: windowResult.reason,
+    };
   }
 
   try {
-    const recommendations = recommendLocations(window, {}, { locations, availability: options.availability });
+    const recommendations = recommendLocations(windowResult.window, {}, { locations, availability: options.availability });
+    const scheduledIsRecommended =
+      canonicalScheduledId !== null &&
+      recommendations.some((recommendation) => recommendation.location.id === canonicalScheduledId);
+
     return {
       scheduled,
-      window,
+      canonicalScheduledId,
+      scheduledIsRecommended,
+      window: windowResult.window,
       recommendations,
       status: recommendations.length > 0 ? 'ok' : 'no-match',
     };
   } catch {
-    return { scheduled, window, recommendations: [], status: 'unavailable-window' };
+    return {
+      scheduled,
+      canonicalScheduledId,
+      scheduledIsRecommended: false,
+      window: windowResult.window,
+      recommendations: [],
+      status: 'invalid-range',
+    };
   }
 }

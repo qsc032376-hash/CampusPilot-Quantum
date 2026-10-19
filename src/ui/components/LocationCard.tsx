@@ -1,11 +1,30 @@
 import type { ScheduleRequest, StudyBlock } from '../../types.ts';
 import { formatDayShort, formatDuration, formatRangeDetailed } from '../format.ts';
 import { buildLocationPlan } from '../locationPlan.ts';
+import type { LocationPlanStatus } from '../locationPlan.ts';
 import { EmptyState } from './EmptyState.tsx';
 
 interface LocationCardProps {
   block: StudyBlock | null;
   request: ScheduleRequest;
+}
+
+/** Plain-language reason for a skipped availability check. */
+function statusReason(status: LocationPlanStatus): string {
+  switch (status) {
+    case 'crosses-dst':
+      return 'the block spans a daylight-saving change.';
+    case 'not-minute-aligned':
+      return 'the block does not start and end on a whole minute.';
+    case 'crosses-midnight':
+      return 'the block crosses midnight.';
+    case 'no-match':
+      return 'no simulated availability covers it.';
+    case 'invalid-range':
+      return 'the block has no valid time range.';
+    default:
+      return 'its hours could not be verified.';
+  }
 }
 
 /**
@@ -62,6 +81,20 @@ export function LocationCard({ block, request }: LocationCardProps) {
         </dl>
       ) : (
         <p className="cp-hint">No building or room details supplied for this location.</p>
+      )}
+
+      {plan.status !== 'ok' && (
+        <p className="cp-hint">
+          The assigned location was <strong>not</strong> checked against opening hours for this block, because{' '}
+          {statusReason(plan.status)} The schedule is unchanged; only the availability check was skipped.
+        </p>
+      )}
+
+      {plan.status === 'ok' && plan.scheduled && !plan.scheduledIsRecommended && (
+        <p className="cp-hint">
+          This place is not covered by the simulated opening hours for this block. The recommendation panel lists the
+          locations that are.
+        </p>
       )}
 
       <p className="cp-panel__foot">

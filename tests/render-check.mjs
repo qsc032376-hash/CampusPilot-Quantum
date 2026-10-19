@@ -257,6 +257,56 @@ check(
   '',
 );
 
+// --- strict time conversion: DST, seconds, and unverified assignments ---
+const dstBlock = {
+  ...threePmBlock,
+  start: '2026-11-01T01:30:00-04:00',
+  end: '2026-11-01T01:45:00-05:00',
+};
+const dstHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: dstBlock, request: sampleRequest }),
+);
+check(
+  'a cross-DST block explains why no list is shown',
+  dstHtml.includes('daylight-saving change') && !dstHtml.includes('cp-locations__row'),
+  '',
+);
+
+const secondsBlock = { ...threePmBlock, start: '2026-10-19T15:00:30-04:00' };
+const secondsHtml = renderToStaticMarkup(
+  createElement(RecommendedLocations, { block: secondsBlock, request: sampleRequest }),
+);
+check(
+  'a block with seconds is rejected rather than rounded',
+  secondsHtml.includes('whole minute') && !secondsHtml.includes('cp-locations__row'),
+  '',
+);
+
+const manyTags = (manyHtml.match(/cp-tag">Scheduled/g) || []).length;
+check('exactly one recommendation is marked as scheduled', manyTags === 1, 'tags=' + manyTags);
+
+const earlyBlock = {
+  ...threePmBlock,
+  start: '2026-10-19T00:30:00-04:00',
+  end: '2026-10-19T01:00:00-04:00',
+};
+const earlyWhere = renderToStaticMarkup(
+  createElement(LocationCard, { block: earlyBlock, request: sampleRequest }),
+);
+check(
+  'an unverified assignment is called out in the Where card',
+  earlyWhere.includes('not</strong> checked against opening hours') ||
+    earlyWhere.includes('not covered by the simulated opening hours'),
+  '',
+);
+
+const dstWhere = renderToStaticMarkup(createElement(LocationCard, { block: dstBlock, request: sampleRequest }));
+check(
+  'a cross-DST block marks the assignment as unverified',
+  dstWhere.includes('checked against opening hours') && dstWhere.includes('daylight-saving'),
+  '',
+);
+
 const taskRequest = {
   ...sampleRequest,
   tasks: [
