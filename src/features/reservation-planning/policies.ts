@@ -40,8 +40,10 @@ const LIMITS_BY_LOCATION: Record<string, Limits> = {
     maxAdvanceDays: 3,
     maxGroupSize: 5,
   },
-  // The snapshot records the booking system only, with no stated limits.
-  'faes-library': { ...UNKNOWN_LIMITS },
+  // The snapshot records the same University Libraries booking system as
+  // Thompson and 18th Avenue, so the group-study rules published for that
+  // system apply: up to 4 hours per booking and up to a week ahead.
+  'faes-library': { ...UNKNOWN_LIMITS, maxDurationMinutes: 240, maxAdvanceDays: 7 },
   // Not reservable: event spaces are rented through a different office.
   'ohio-union': { ...UNKNOWN_LIMITS },
 };
@@ -59,6 +61,16 @@ export const RESERVATION_POLICIES: readonly ReservationPolicy[] = CAMPUS_LOCATIO
 export function findReservationPolicy(locationId: string): ReservationPolicy | null {
   return RESERVATION_POLICIES.find((policy) => policy.locationId === locationId) ?? null;
 }
+
+/**
+ * How the verified "up to a week ahead" rule is measured.
+ *
+ * The official pages state "a week ahead" / "N days ahead" without specifying a
+ * calendar-day boundary, so this prototype enforces it as **elapsed time**: the
+ * start must be within `maxAdvanceDays × 24 hours` of now. This is stated in the
+ * UI next to the limit instead of being silently assumed.
+ */
+export const ADVANCE_WINDOW_MEASUREMENT = 'elapsed 24-hour periods from now';
 
 /** Locations a user can pick in the planner (all verified snapshot entries). */
 export function listReservationLocations(): { id: string; name: string; reservable: boolean }[] {

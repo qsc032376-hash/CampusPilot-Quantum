@@ -1,5 +1,4 @@
 export type {
-  ConfirmationEvidence,
   NavigationResult,
   ReservationInput,
   ReservationIssue,
@@ -10,10 +9,13 @@ export type {
   ReservationValidation,
 } from './types.ts';
 
-export { RESERVATION_POLICIES, findReservationPolicy, listReservationLocations } from './policies.ts';
+export type { VerificationAttempt } from './planReservation.ts';
+
+export { ADVANCE_WINDOW_MEASUREMENT, RESERVATION_POLICIES, findReservationPolicy, listReservationLocations } from './policies.ts';
 
 export {
   LIVE_AVAILABILITY_NOTICE,
+  NO_TRUSTED_CONFIRMATION_SOURCE,
   applyReservationInput,
   createReservationPlan,
   emptyReservationInput,

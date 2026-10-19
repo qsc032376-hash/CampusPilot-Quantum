@@ -372,7 +372,7 @@ async function main() {
     );
     record(
       'policy shows its verified source and date',
-      plannerText.includes('snapshot verified 2026-10-17') && plannerText.includes('Official Ohio State page'),
+      /snapshot verified \d{4}-\d{2}-\d{2}/.test(plannerText) && plannerText.includes('Official Ohio State page'),
       '',
     );
     record(

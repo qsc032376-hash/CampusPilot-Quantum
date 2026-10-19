@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LIVE_AVAILABILITY_NOTICE,
+  NO_TRUSTED_CONFIRMATION_SOURCE,
   applyReservationInput,
   createReservationPlan,
   findReservationPolicy,
@@ -124,12 +125,14 @@ test('the Health Sciences group limit of five people is enforced', () => {
   assert.equal(fits.ok, true);
 });
 
-test('unverified limits are not invented', () => {
-  // FAES records the booking system only, so no duration or advance limit exists.
+test('FAES inherits the shared four-hour and seven-day group-study limits', () => {
   const policy = findReservationPolicy('faes-library');
-  assert.equal(policy?.maxDurationMinutes, null);
-  assert.equal(policy?.maxAdvanceDays, null);
-  const result = validateReservation(
+  assert.equal(policy?.maxDurationMinutes, 240);
+  assert.equal(policy?.maxAdvanceDays, 7);
+  // Room capacity is not stated by the verified source, so it stays unknown.
+  assert.equal(policy?.maxGroupSize, null);
+
+  const tooLong = validateReservation(
     {
       locationId: 'faes-library',
       startIso: '2026-10-19T09:00:00-04:00',
@@ -140,7 +143,58 @@ test('unverified limits are not invented', () => {
     policy,
     NOW,
   );
-  assert.equal(result.ok, true);
+  assert.equal(tooLong.ok, false);
+  assert.ok(tooLong.issues.some((issue) => issue.code === 'exceeds-max-duration'));
+  assert.ok(!tooLong.issues.some((issue) => issue.code === 'exceeds-max-group-size'));
+});
+
+test('the four-hour limit is inclusive at exactly four hours', () => {
+  const policy = findReservationPolicy('thompson-library');
+  const atLimit = validateReservation(
+    {
+      locationId: 'thompson-library',
+      startIso: '2026-10-19T12:00:00-04:00',
+      endIso: '2026-10-19T16:00:00-04:00',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(atLimit.ok, true);
+
+  const overLimit = validateReservation(
+    {
+      locationId: 'thompson-library',
+      startIso: '2026-10-19T12:00:00-04:00',
+      endIso: '2026-10-19T16:01:00-04:00',
+      groupSize: 2,
+      purpose: '',
+    },
+    policy,
+    NOW,
+  );
+  assert.equal(overLimit.ok, false);
+  assert.ok(overLimit.issues.some((issue) => issue.code === 'exceeds-max-duration'));
+});
+
+test('the seven-day window is measured in elapsed 24-hour periods', () => {
+  const policy = findReservationPolicy('faes-library');
+  // NOW is 2026-10-17T12:00:00Z, so exactly seven days later is inclusive.
+  const atLimit = validateReservation(
+    { locationId: 'faes-library', startIso: '2026-10-24T12:00:00Z', endIso: '2026-10-24T13:00:00Z', groupSize: 2, purpose: '' },
+    policy,
+    NOW,
+  );
+  assert.equal(atLimit.ok, true);
+
+  const beyond = validateReservation(
+    { locationId: 'faes-library', startIso: '2026-10-24T12:01:00Z', endIso: '2026-10-24T13:01:00Z', groupSize: 2, purpose: '' },
+    policy,
+    NOW,
+  );
+  assert.equal(beyond.ok, false);
+  assert.ok(beyond.issues.some((issue) => issue.code === 'exceeds-advance-window'));
 });
 
 test('a location with no bookable rooms is blocked', () => {
@@ -238,24 +292,38 @@ test('user reporting is ignored unless the official system was opened', () => {
   assert.equal(plan.userReportedAt, null);
 });
 
-test('verification requires a trustworthy confirmation reference', () => {
+test('no caller-supplied evidence can mark a reservation verified', () => {
   const reported = reportUserBooking(openOfficialSystem(readyPlan(), () => true, NOW), '2026-10-19T20:00:00.000Z');
-  assert.throws(() => verifyOfficialConfirmation(reported, null, '2026-10-19T20:05:00.000Z'));
-  assert.throws(() =>
-    verifyOfficialConfirmation(
-      reported,
-      { source: 'official-confirmation', reference: '   ' },
-      '2026-10-19T20:05:00.000Z',
-    ),
-  );
+  assert.equal(reported.state, 'user-reported');
 
-  const verified = verifyOfficialConfirmation(
-    reported,
+  const attempts: unknown[] = [
+    'OSU-CONF-123',
+    'https://library.osu.edu/confirmation/abc',
     { source: 'official-confirmation', reference: 'OSU-CONF-123' },
-    '2026-10-19T20:05:00.000Z',
-  );
-  assert.equal(verified.state, 'verified');
-  assert.equal(verified.verifiedAt, '2026-10-19T20:05:00.000Z');
+    { verified: true, reference: 'fake' },
+    { status: 'confirmed' },
+    null,
+    undefined,
+    42,
+  ];
+
+  for (const evidence of attempts) {
+    const outcome = verifyOfficialConfirmation(reported, evidence);
+    assert.equal(outcome.verified, false, `evidence ${JSON.stringify(evidence)} must not verify`);
+    assert.equal(outcome.reason, NO_TRUSTED_CONFIRMATION_SOURCE);
+    // The plan is returned untouched: still self-reported, never confirmed.
+    assert.equal(outcome.plan.state, 'user-reported');
+    assert.equal(outcome.plan.verifiedAt, null);
+  }
+});
+
+test('an opened plan cannot jump straight to verified either', () => {
+  const opened = openOfficialSystem(readyPlan(), () => true, NOW);
+  assert.equal(opened.state, 'opened');
+  const outcome = verifyOfficialConfirmation(opened, { source: 'official-confirmation', reference: 'x' });
+  assert.equal(outcome.verified, false);
+  assert.equal(outcome.plan.state, 'opened');
+  assert.equal(outcome.plan.verifiedAt, null);
 });
 
 test('editing any field drops the plan back to draft', () => {

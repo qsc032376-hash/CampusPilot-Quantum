@@ -77,9 +77,3 @@ export interface ReservationPlan {
   userReportedAt: string | null;
   verifiedAt: string | null;
 }
-
-/** Evidence a state may only reach `verified` with. None exists in this prototype. */
-export interface ConfirmationEvidence {
-  source: 'official-confirmation';
-  reference: string;
-}

@@ -1,6 +1,5 @@
 import { findReservationPolicy } from './policies.ts';
 import type {
-  ConfirmationEvidence,
   ReservationInput,
   ReservationIssue,
   ReservationPlan,
@@ -210,18 +209,26 @@ export function reportUserBooking(plan: ReservationPlan, nowIso: string): Reserv
   return { ...plan, state: 'user-reported', userReportedAt: nowIso };
 }
 
+export interface VerificationAttempt {
+  plan: ReservationPlan;
+  verified: boolean;
+  reason: string | null;
+}
+
+export const NO_TRUSTED_CONFIRMATION_SOURCE =
+  'CampusPilot has no trusted official confirmation source, so a reservation can never be marked officially confirmed here.';
+
 /**
- * Only a trustworthy official confirmation reference may reach `verified`.
- * No such source exists in this prototype, so the UI never offers it.
+ * Confirmation verification is intentionally unimplementable in this prototype.
+ *
+ * A caller-supplied string, URL, object or record is untrusted by definition: it
+ * could be typed by the user or fabricated. Promoting a plan to `verified` would
+ * require a server-side verifier that can actually query Ohio State, which does
+ * not exist, so this function refuses every input and leaves the plan untouched.
+ *
+ * The `verified` state therefore stays defined but unreachable; the UI never
+ * offers it and never claims an official booking.
  */
-export function verifyOfficialConfirmation(
-  plan: ReservationPlan,
-  evidence: ConfirmationEvidence | null,
-  nowIso: string,
-): ReservationPlan {
-  if (!evidence || evidence.source !== 'official-confirmation' || evidence.reference.trim() === '') {
-    throw new Error('A reservation can only be marked verified with a trustworthy official confirmation reference.');
-  }
-  if (plan.state !== 'user-reported') return plan;
-  return { ...plan, state: 'verified', verifiedAt: nowIso };
+export function verifyOfficialConfirmation(plan: ReservationPlan, _evidence?: unknown): VerificationAttempt {
+  return { plan, verified: false, reason: NO_TRUSTED_CONFIRMATION_SOURCE };
 }

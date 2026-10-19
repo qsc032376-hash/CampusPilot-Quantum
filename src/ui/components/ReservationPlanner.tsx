@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReservationPlan, ReservationState } from '../../features/reservation-planning/index.ts';
 import {
+  ADVANCE_WINDOW_MEASUREMENT,
   LIVE_AVAILABILITY_NOTICE,
   applyReservationInput,
   createReservationPlan,
@@ -196,7 +197,9 @@ export function ReservationPlanner({ openUrl = defaultOpen, now = () => new Date
               <dd>
                 {policy.maxDurationMinutes === null ? 'Duration limit not verified' : `Max ${policy.maxDurationMinutes} min`}
                 {' · '}
-                {policy.maxAdvanceDays === null ? 'advance window not verified' : `up to ${policy.maxAdvanceDays} days ahead`}
+                {policy.maxAdvanceDays === null
+                  ? 'advance window not verified'
+                  : `up to ${policy.maxAdvanceDays} days ahead (${ADVANCE_WINDOW_MEASUREMENT})`}
                 {' · '}
                 {policy.maxGroupSize === null ? 'group limit not verified' : `up to ${policy.maxGroupSize} people`}
               </dd>
