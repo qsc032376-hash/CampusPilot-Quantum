@@ -445,6 +445,19 @@
 }
 .cp-location__row dd { margin: 0; font-size: 12.5px; color: #3b423f; overflow-wrap: anywhere; }
 
+.cp-locations { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; }
+.cp-locations__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  background: var(--cp-tint);
+  border: 1px solid var(--cp-line);
+  border-radius: 8px;
+}
+.cp-locations__name { font-size: 12.5px; font-weight: 700; color: #2b3230; }
+.cp-locations__meta { font-size: 11px; line-height: 1.45; color: var(--cp-soft); }
+
 .cp-foot {
   max-width: 1280px;
   margin: 0 auto;

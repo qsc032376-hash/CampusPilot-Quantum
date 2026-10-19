@@ -189,6 +189,42 @@ check(
   '',
 );
 
+// --- multiple campus locations reach the card (the reported bug) ---
+const threePmBlock = {
+  id: 'study-a',
+  taskId: 't1',
+  title: 'Study',
+  start: '2026-10-19T15:00:00-04:00',
+  end: '2026-10-19T16:30:00-04:00',
+  locationId: 'thompson',
+};
+const manyHtml = renderToStaticMarkup(createElement(LocationCard, { block: threePmBlock, request: sampleRequest }));
+check(
+  'several locations are listed for an afternoon block',
+  manyHtml.includes('Also open for this block (5)') &&
+    manyHtml.includes('18th Avenue Library') &&
+    manyHtml.includes('Ohio Union'),
+  '',
+);
+check('recommendation reasons mark hours as simulated', manyHtml.includes('simulated hours'), '');
+check('availability disclaimer is rendered', manyHtml.includes('Availability is simulated'), '');
+
+const oneBlock = { ...threePmBlock, start: '2026-10-19T00:30:00-04:00', end: '2026-10-19T01:00:00-04:00' };
+const oneHtml = renderToStaticMarkup(createElement(LocationCard, { block: oneBlock, request: sampleRequest }));
+check(
+  'exactly one location renders a count of one',
+  oneHtml.includes('Also open for this block (1)') && oneHtml.includes('18th Avenue Library'),
+  '',
+);
+
+const zeroBlock = { ...threePmBlock, start: '2026-10-18T02:00:00-04:00', end: '2026-10-18T03:00:00-04:00' };
+const zeroHtml = renderToStaticMarkup(createElement(LocationCard, { block: zeroBlock, request: sampleRequest }));
+check(
+  'no open location shows an explicit fallback',
+  zeroHtml.includes('No location in the campus list is listed as open'),
+  '',
+);
+
 const taskRequest = {
   ...sampleRequest,
   tasks: [

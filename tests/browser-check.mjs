@@ -277,6 +277,16 @@ async function main() {
       locationText.includes('Thompson Library') && locationText.includes('No building or room details supplied'),
       '',
     );
+    record(
+      'several campus locations are listed after selecting a block',
+      ['18th Avenue Library', 'Ohio Union', 'Health Sciences Library'].every((name) => locationText.includes(name)),
+      '',
+    );
+    record(
+      'location list keeps the simulated-hours label',
+      locationText.includes('simulated hours') && locationText.includes('Availability is simulated'),
+      '',
+    );
   } finally {
     if (socket) socket.close();
     chrome.kill();
