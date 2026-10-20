@@ -331,6 +331,116 @@ async function main() {
       locationText.includes('simulated hours') && locationText.includes('Availability is simulated'),
       '',
     );
+
+    // --- reservation planning workflow ---
+    record(
+      'reservation planner panel is rendered',
+      await evaluate("!!document.querySelector('#app .cp-reservation')"),
+      '',
+    );
+    record(
+      'Phase 2D availability fallback is visible',
+      await evaluate(`(() => {
+        const el = document.querySelector('#app .cp-notice');
+        if (!el) return false;
+        const box = el.getBoundingClientRect();
+        return (
+          box.width > 0 &&
+          box.height > 0 &&
+          el.textContent.trim() ===
+            'Availability unknown. Please confirm the room and time in the official reservation system.'
+        );
+      })()`),
+      '',
+    );
+
+    await evaluate(`(() => {
+      const select = document.querySelector('#app .cp-reservation select');
+      if (!select) return 'missing';
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'thompson-library');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const plannerText = await evaluate("document.querySelector('#app .cp-reservation').innerText");
+    const plannerLower = plannerText.toLowerCase();
+    record(
+      'verified policy separates eligibility, access and availability',
+      ['booking eligibility', 'building access', 'room availability'].every((label) => plannerLower.includes(label)),
+      '',
+    );
+    record(
+      'policy shows rule-specific source and dates',
+      /rules read \d{4}-\d{2}-\d{2}/.test(plannerText) &&
+        /location data verified \d{4}-\d{2}-\d{2}/.test(plannerText) &&
+        plannerText.includes('Official booking rules'),
+      '',
+    );
+    record(
+      'libraries rooms state the group-only eligibility',
+      plannerText.includes('Group study rooms only; individual study is walk-in'),
+      '',
+    );
+    record(
+      'libraries policy displays the 15-minute forfeiture rule',
+      /late arrival/i.test(plannerText) && plannerText.includes('more than 15 minutes late forfeits the reservation'),
+      '',
+    );
+    record(
+      'planner never claims an official confirmation',
+      !plannerText.includes('Officially confirmed'),
+      '',
+    );
+
+    await evaluate(`(() => {
+      const select = document.querySelector('#app .cp-reservation select');
+      if (!select) return 'missing';
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'health-sciences-library');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const hslText = await evaluate("document.querySelector('#app .cp-reservation').innerText");
+    record(
+      'HSL displays the conditional unoccupied-room rule',
+      /unoccupied room/i.test(hslText) &&
+        hslText.includes('may be released if unoccupied after 10 minutes'),
+      '',
+    );
+    record(
+      'HSL does not inherit the libraries late-arrival rule',
+      !/more than 15 minutes late/i.test(hslText),
+      '',
+    );
+    record(
+      'Thompson shows no ELA section',
+      !/Extended Library Access/i.test(plannerText),
+      '',
+    );
+    record(
+      'HSL renders the separate ELA context note',
+      /extended library access/i.test(hslText) &&
+        hslText.includes('first come, first served') &&
+        hslText.includes('A reservation is not required during these hours.') &&
+        hslText.includes('Other study-room rules still apply.'),
+      '',
+    );
+    record(
+      'HSL ELA note keeps the uncertainty caveat and cites its source',
+      /10-minute release rule/i.test(hslText) &&
+        (await evaluate(
+          "[...document.querySelectorAll('#app .cp-reservation a')].some((a) => a.href.includes('extended-library-access-ela'))",
+        )),
+      '',
+    );
+    record(
+      'HSL ordinary rules still show the two-hour limit',
+      /official rules/i.test(hslText) && hslText.includes('2-hour reservations'),
+      '',
+    );
   } finally {
     if (socket) socket.close();
     chrome.kill();

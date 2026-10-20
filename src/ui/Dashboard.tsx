@@ -8,6 +8,7 @@ import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
 import { RecommendedLocations } from './components/RecommendedLocations.tsx';
+import { ReservationPlanner } from './components/ReservationPlanner.tsx';
 import { createResetState } from './dashboardReset.ts';
 import './ui.css';
 
@@ -100,6 +101,10 @@ export function Dashboard({ request: initialRequest }: DashboardProps) {
           />
         </div>
       </main>
+
+      <div className="cp-reservation">
+        <ReservationPlanner />
+      </div>
 
       <footer className="cp-foot">
         Student-built prototype · Data is in memory and resets on reload · Availability is not verified
