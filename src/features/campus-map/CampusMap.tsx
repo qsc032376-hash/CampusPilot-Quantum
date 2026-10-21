@@ -26,6 +26,52 @@ import './campusMap.css';
 type MapStatus = 'loading' | 'ready' | 'error';
 
 /**
+ * Gives a Leaflet marker icon explicit keyboard semantics.
+ *
+ * Leaflet's own `keyboard` option only wires Enter (and varies across versions),
+ * so the element is handled here instead: focusable, labelled, Enter activates
+ * once on keydown, Space suppresses page scrolling on keydown and activates once
+ * on keyup. `event.repeat` guards against auto-repeat firing selection twice.
+ *
+ * The icon element is recreated whenever a marker is removed and re-added by the
+ * category filter, so this is idempotent per element via a data flag.
+ */
+function decorateMarker(marker: Marker, location: MapLocation, onActivate: (id: string) => void): void {
+  const element = marker.getElement();
+  if (!element) return;
+
+  element.setAttribute('tabindex', '0');
+  element.setAttribute('role', 'button');
+  element.setAttribute(
+    'aria-label',
+    `${location.name}, ${MAP_CATEGORY_LABELS[location.category]}. Select to show details.`,
+  );
+
+  if (element.dataset.cpKeyboardBound === 'true') return;
+  element.dataset.cpKeyboardBound = 'true';
+
+  element.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      if (event.repeat) return;
+      event.preventDefault();
+      onActivate(location.id);
+      return;
+    }
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      // Stop the page from scrolling; the selection happens on keyup only.
+      event.preventDefault();
+    }
+  });
+
+  element.addEventListener('keyup', (event) => {
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault();
+      onActivate(location.id);
+    }
+  });
+}
+
+/**
  * Read-only campus map of the verified locations.
  *
  * It shows approximate building points on OpenStreetMap tiles and nothing else:
@@ -89,26 +135,36 @@ export function CampusMap() {
         });
         tiles.addTo(map);
 
-        for (const location of locations) {
-          const marker = leaflet.marker([location.lat, location.lng], {
-            icon: leaflet.divIcon({
-              className: `cp-map__pin cp-map__pin--${location.category}`,
-              html: '',
-              iconSize: [16, 16],
-              iconAnchor: [8, 8],
-            }),
-            title: location.name,
-            alt: location.name,
-            keyboard: true,
-          });
-          marker.on('click', () => setSelectedId(location.id));
-          marker.addTo(map);
-          markersRef.current.set(location.id, marker);
-        }
-
+        // The first view must come before markers: Leaflet defers layer `onAdd`
+        // until the map has loaded, so markers added earlier would have no DOM
+        // element to receive tabindex, role or key handlers.
         map.fitBounds(fitBounds, { padding: MAP_FIT_PADDING_PX });
-        mapRef.current = map;
-        if (!cancelled) setStatus('ready');
+        const createdMap = map;
+
+        createdMap.whenReady(() => {
+          if (cancelled) return;
+          for (const location of locations) {
+            const marker = leaflet.marker([location.lat, location.lng], {
+              icon: leaflet.divIcon({
+                className: `cp-map__pin cp-map__pin--${location.category}`,
+                html: '',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8],
+              }),
+              title: location.name,
+              alt: location.name,
+              // Handled explicitly in decorateMarker so Enter/Space cannot double-fire.
+              keyboard: false,
+            });
+            marker.on('click', () => selectLocation(location.id));
+            marker.addTo(createdMap);
+            decorateMarker(marker, location, selectLocation);
+            markersRef.current.set(location.id, marker);
+          }
+
+          mapRef.current = createdMap;
+          setStatus('ready');
+        });
       } catch {
         if (!cancelled) setStatus('error');
       }
@@ -134,7 +190,11 @@ export function CampusMap() {
       if (!marker) continue;
       const shouldShow = active.has(location.category);
       const shown = map.hasLayer(marker);
-      if (shouldShow && !shown) marker.addTo(map);
+      if (shouldShow && !shown) {
+        marker.addTo(map);
+        // Re-adding recreates the icon element, so re-apply keyboard semantics.
+        decorateMarker(marker, location, selectLocation);
+      }
       if (!shouldShow && shown) map.removeLayer(marker);
     }
   }, [active, locations, status]);
@@ -145,6 +205,11 @@ export function CampusMap() {
       setSelectedId(null);
     }
   }, [selectedId, visible]);
+
+  /** Single selection path shared by marker clicks, marker keys and the list. */
+  function selectLocation(id: string) {
+    setSelectedId(id);
+  }
 
   function toggleCategory(category: CampusLocationCategory) {
     setActive((current) => {

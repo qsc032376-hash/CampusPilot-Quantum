@@ -506,6 +506,177 @@ async function main() {
       (await evaluate("document.querySelectorAll('#app .cp-map__item').length")) === 4,
       '',
     );
+
+    // --- keyboard operation of map markers (D's blocking defect) ---
+    // Restore the student-center marker so both categories are present again.
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app .cp-map__filter')].find((item) =>
+        item.textContent.includes('Student center'),
+      );
+      if (button && button.getAttribute('aria-pressed') === 'false') button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const markerInfo = await evaluate(`(() => {
+      const pins = [...document.querySelectorAll('#app .cp-map__pin')];
+      return {
+        total: pins.length,
+        decorated: pins.filter((item) => item.getAttribute('role') === 'button').length,
+        pins: pins.map((item) => ({
+          label: item.getAttribute('aria-label'),
+          title: item.getAttribute('title'),
+          bound: item.dataset.cpKeyboardBound ?? null,
+          tabindex: item.getAttribute('tabindex'),
+        })),
+      };
+    })()`);
+    record(
+      'markers expose button semantics and a readable name',
+      !!markerInfo &&
+        markerInfo.decorated === markerInfo.total &&
+        markerInfo.pins.every((pin) => /Select to show details/.test(pin.label ?? '')),
+      JSON.stringify(markerInfo),
+    );
+
+    // Real Tab traversal must land on a marker.
+    await evaluate(`(() => {
+      const lastFilter = [...document.querySelectorAll('#app .cp-map__filter')].pop();
+      if (lastFilter) lastFilter.focus();
+      return document.activeElement ? document.activeElement.className : '';
+    })()`);
+    await send('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'Tab',
+      code: 'Tab',
+      windowsVirtualKeyCode: 9,
+      nativeVirtualKeyCode: 9,
+    });
+    await send('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key: 'Tab',
+      code: 'Tab',
+      windowsVirtualKeyCode: 9,
+      nativeVirtualKeyCode: 9,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let activeClass = await evaluate('String(document.activeElement && document.activeElement.className)');
+    if (!activeClass.includes('cp-map__pin')) {
+      // The map container itself is focusable, so one more Tab reaches a marker.
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key: 'Tab',
+        code: 'Tab',
+        windowsVirtualKeyCode: 9,
+        nativeVirtualKeyCode: 9,
+      });
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key: 'Tab',
+        code: 'Tab',
+        windowsVirtualKeyCode: 9,
+        nativeVirtualKeyCode: 9,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      activeClass = await evaluate('String(document.activeElement && document.activeElement.className)');
+    }
+    record('Tab reaches a map marker', activeClass.includes('cp-map__pin'), activeClass);
+
+    const detailsText = () =>
+      evaluate("(document.querySelector('#app .cp-map__details') || {}).innerText || ''");
+    const focusMarker = (name) =>
+      evaluate(`(() => {
+        const pin = [...document.querySelectorAll('#app .cp-map__pin')].find((item) =>
+          (item.getAttribute('aria-label') || '').startsWith(${JSON.stringify(name)}),
+        );
+        if (!pin) return 'missing';
+        pin.focus();
+        return 'ok';
+      })()`);
+    const pressKey = async (key, code, vk, autoRepeat) => {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+        autoRepeat,
+      });
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+    const keyDownOnly = async (key, code, vk, autoRepeat) => {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+        autoRepeat,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    };
+    const keyUpOnly = async (key, code, vk) => {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+
+    // Start from a different selection so activation is observable.
+    await evaluate("document.querySelectorAll('#app .cp-map__item')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const beforeText = await detailsText();
+
+    record('marker can be focused directly', (await focusMarker('Ohio Union')) === 'ok', '');
+    record(
+      'focused marker is the active element',
+      await evaluate(`(() => {
+        const pin = document.activeElement;
+        return !!pin && String(pin.className).includes('cp-map__pin') && (pin.getAttribute('aria-label') || '').startsWith('Ohio Union');
+      })()`),
+      await evaluate('String(document.activeElement && document.activeElement.getAttribute("aria-label"))'),
+    );
+
+    // Auto-repeat Enter must not fire at all.
+    await keyDownOnly('Enter', 'Enter', 13, true);
+    record('auto-repeated Enter does not activate a marker', (await detailsText()) === beforeText, '');
+
+    await pressKey('Enter', 'Enter', 13, false);
+    record('Enter selects the marker and shows details', /ohio union/i.test(await detailsText()), '');
+
+    // Space: no activation and no scrolling until keyup.
+    await evaluate("document.querySelectorAll('#app .cp-map__item')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await focusMarker('Ohio Union');
+    const beforeSpace = await detailsText();
+    const scrollBefore = await evaluate('window.scrollY');
+
+    await keyDownOnly(' ', 'Space', 32, false);
+    record('Space keydown does not activate yet', (await detailsText()) === beforeSpace, '');
+    await keyDownOnly(' ', 'Space', 32, true);
+    await keyDownOnly(' ', 'Space', 32, true);
+    record('held Space does not activate repeatedly', (await detailsText()) === beforeSpace, '');
+
+    const scrollDuringHold = await evaluate('window.scrollY');
+    await keyUpOnly(' ', 'Space', 32);
+    record('Space keyup activates once', /ohio union/i.test(await detailsText()), '');
+    record(
+      'Space does not scroll the page',
+      scrollDuringHold === scrollBefore && (await evaluate('window.scrollY')) === scrollBefore,
+      `before=${scrollBefore} during=${scrollDuringHold} after=${await evaluate('window.scrollY')}`,
+    );
+
     record(
       'return-to-campus-view control exists',
       await evaluate(

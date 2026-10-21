@@ -122,6 +122,13 @@
 
 .cp-map__pin--student-center { background: #2f6b45; }
 
+/* Keyboard focus must be obvious on the map markers. */
+.cp-map__pin:focus-visible {
+  outline: 3px solid var(--cp-ink, #24292b);
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
 @media (max-width: 840px) {
   .cp-map-mount { padding: 0 18px 10px; }
   .cp-map__layout { grid-template-columns: 1fr; }
