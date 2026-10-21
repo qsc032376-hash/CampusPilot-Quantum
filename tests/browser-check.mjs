@@ -94,6 +94,9 @@ async function main() {
     outdir: OUT_DIR,
     entryNames: 'bundle',
     jsx: 'automatic',
+    // Leaflet's stylesheet references marker images; inline them so the fixture
+    // needs no extra asset files.
+    loader: { '.png': 'dataurl', '.svg': 'dataurl', '.gif': 'dataurl' },
     logLevel: 'error',
   });
   await writeFile(path.join(OUT_DIR, 'index.html'), html, 'utf8');
@@ -439,6 +442,246 @@ async function main() {
     record(
       'HSL ordinary rules still show the two-hour limit',
       /official rules/i.test(hslText) && hslText.includes('2-hour reservations'),
+      '',
+    );
+
+    // --- campus map ---
+    await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (await evaluate("!!document.querySelector('#app .leaflet-container')")) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    record('map panel renders', await evaluate("!!document.querySelector('#app .cp-map')"), '');
+    record(
+      'leaflet map initialises with a visible canvas',
+      await evaluate(`(() => {
+        const el = document.querySelector('#app .leaflet-container');
+        if (!el) return false;
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      })()`),
+      '',
+    );
+    record(
+      'OSM attribution is visible on the map',
+      await evaluate(`(() => {
+        const el = document.querySelector('#app .leaflet-control-attribution');
+        return !!el && el.textContent.includes('OpenStreetMap');
+      })()`),
+      '',
+    );
+    record(
+      'map lists the five verified locations',
+      (await evaluate("document.querySelectorAll('#app .cp-map__item').length")) === 5,
+      '',
+    );
+    record(
+      'map draws five markers',
+      (await evaluate("document.querySelectorAll('#app .cp-map__pin').length")) === 5,
+      '',
+    );
+
+    await evaluate("document.querySelectorAll('#app .cp-map__item')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const mapText = await evaluate("document.querySelector('#app .cp-map').innerText");
+    record(
+      'selecting a location shows its details and official link',
+      mapText.includes('approximate building point') && mapText.includes('Official location page'),
+      '',
+    );
+    record('map makes no live-availability claim', !/available now|open now|rooms? free/i.test(mapText), '');
+
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app .cp-map__filter')].find((item) =>
+        item.textContent.includes('Student center'),
+      );
+      if (!button) return 'missing';
+      button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    record(
+      'category filter removes the hidden category from the list',
+      (await evaluate("document.querySelectorAll('#app .cp-map__item').length")) === 4,
+      '',
+    );
+
+    // --- keyboard operation of map markers (D's blocking defect) ---
+    // Restore the student-center marker so both categories are present again.
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app .cp-map__filter')].find((item) =>
+        item.textContent.includes('Student center'),
+      );
+      if (button && button.getAttribute('aria-pressed') === 'false') button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const markerInfo = await evaluate(`(() => {
+      const pins = [...document.querySelectorAll('#app .cp-map__pin')];
+      return {
+        total: pins.length,
+        decorated: pins.filter((item) => item.getAttribute('role') === 'button').length,
+        pins: pins.map((item) => ({
+          label: item.getAttribute('aria-label'),
+          title: item.getAttribute('title'),
+          bound: item.dataset.cpKeyboardBound ?? null,
+          tabindex: item.getAttribute('tabindex'),
+        })),
+      };
+    })()`);
+    record(
+      'markers expose button semantics and a readable name',
+      !!markerInfo &&
+        markerInfo.decorated === markerInfo.total &&
+        markerInfo.pins.every((pin) => /Select to show details/.test(pin.label ?? '')),
+      JSON.stringify(markerInfo),
+    );
+
+    // Real Tab traversal must land on a marker.
+    await evaluate(`(() => {
+      const lastFilter = [...document.querySelectorAll('#app .cp-map__filter')].pop();
+      if (lastFilter) lastFilter.focus();
+      return document.activeElement ? document.activeElement.className : '';
+    })()`);
+    await send('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'Tab',
+      code: 'Tab',
+      windowsVirtualKeyCode: 9,
+      nativeVirtualKeyCode: 9,
+    });
+    await send('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key: 'Tab',
+      code: 'Tab',
+      windowsVirtualKeyCode: 9,
+      nativeVirtualKeyCode: 9,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    let activeClass = await evaluate('String(document.activeElement && document.activeElement.className)');
+    if (!activeClass.includes('cp-map__pin')) {
+      // The map container itself is focusable, so one more Tab reaches a marker.
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key: 'Tab',
+        code: 'Tab',
+        windowsVirtualKeyCode: 9,
+        nativeVirtualKeyCode: 9,
+      });
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key: 'Tab',
+        code: 'Tab',
+        windowsVirtualKeyCode: 9,
+        nativeVirtualKeyCode: 9,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      activeClass = await evaluate('String(document.activeElement && document.activeElement.className)');
+    }
+    record('Tab reaches a map marker', activeClass.includes('cp-map__pin'), activeClass);
+
+    const detailsText = () =>
+      evaluate("(document.querySelector('#app .cp-map__details') || {}).innerText || ''");
+    const focusMarker = (name) =>
+      evaluate(`(() => {
+        const pin = [...document.querySelectorAll('#app .cp-map__pin')].find((item) =>
+          (item.getAttribute('aria-label') || '').startsWith(${JSON.stringify(name)}),
+        );
+        if (!pin) return 'missing';
+        pin.focus();
+        return 'ok';
+      })()`);
+    const pressKey = async (key, code, vk, autoRepeat) => {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+        autoRepeat,
+      });
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+    const keyDownOnly = async (key, code, vk, autoRepeat) => {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+        autoRepeat,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    };
+    const keyUpOnly = async (key, code, vk) => {
+      await send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key,
+        code,
+        windowsVirtualKeyCode: vk,
+        nativeVirtualKeyCode: vk,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+
+    // Start from a different selection so activation is observable.
+    await evaluate("document.querySelectorAll('#app .cp-map__item')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const beforeText = await detailsText();
+
+    record('marker can be focused directly', (await focusMarker('Ohio Union')) === 'ok', '');
+    record(
+      'focused marker is the active element',
+      await evaluate(`(() => {
+        const pin = document.activeElement;
+        return !!pin && String(pin.className).includes('cp-map__pin') && (pin.getAttribute('aria-label') || '').startsWith('Ohio Union');
+      })()`),
+      await evaluate('String(document.activeElement && document.activeElement.getAttribute("aria-label"))'),
+    );
+
+    // Auto-repeat Enter must not fire at all.
+    await keyDownOnly('Enter', 'Enter', 13, true);
+    record('auto-repeated Enter does not activate a marker', (await detailsText()) === beforeText, '');
+
+    await pressKey('Enter', 'Enter', 13, false);
+    record('Enter selects the marker and shows details', /ohio union/i.test(await detailsText()), '');
+
+    // Space: no activation and no scrolling until keyup.
+    await evaluate("document.querySelectorAll('#app .cp-map__item')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await focusMarker('Ohio Union');
+    const beforeSpace = await detailsText();
+    const scrollBefore = await evaluate('window.scrollY');
+
+    await keyDownOnly(' ', 'Space', 32, false);
+    record('Space keydown does not activate yet', (await detailsText()) === beforeSpace, '');
+    await keyDownOnly(' ', 'Space', 32, true);
+    await keyDownOnly(' ', 'Space', 32, true);
+    record('held Space does not activate repeatedly', (await detailsText()) === beforeSpace, '');
+
+    const scrollDuringHold = await evaluate('window.scrollY');
+    await keyUpOnly(' ', 'Space', 32);
+    record('Space keyup activates once', /ohio union/i.test(await detailsText()), '');
+    record(
+      'Space does not scroll the page',
+      scrollDuringHold === scrollBefore && (await evaluate('window.scrollY')) === scrollBefore,
+      `before=${scrollBefore} during=${scrollDuringHold} after=${await evaluate('window.scrollY')}`,
+    );
+
+    record(
+      'return-to-campus-view control exists',
+      await evaluate(
+        "[...document.querySelectorAll('#app .cp-map__filter')].some((item) => item.textContent.includes('Return to campus view'))",
+      ),
       '',
     );
   } finally {

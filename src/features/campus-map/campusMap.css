@@ -1,0 +1,137 @@
+/* Campus map feature styles. Scoped to the map panel; no global selectors. */
+
+.cp-map-mount {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px 10px;
+}
+
+.cp-map__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.cp-map__filter {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #cfd1c8;
+  border-radius: 999px;
+  background: #fdfcf9;
+  color: var(--cp-ink, #24292b);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cp-map__filter:hover { background: #efece5; }
+.cp-map__filter:focus-visible { outline: 3px solid var(--cp-ink, #24292b); outline-offset: 2px; }
+.cp-map__filter.is-active {
+  background: var(--cp-brand, #a51d2d);
+  border-color: var(--cp-brand, #a51d2d);
+  color: #fff;
+}
+.cp-map__filter:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.cp-map__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.cp-map__canvas-wrap { min-width: 0; }
+
+.cp-map__canvas {
+  height: 380px;
+  border: 1px solid var(--cp-line, #dedfd8);
+  border-radius: 10px;
+  background: #f3f2ec;
+}
+
+.cp-map__fallback {
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  background: #fffbeb;
+  border: 1px solid #f3e3b8;
+  border-left: 3px solid #b45309;
+  border-radius: 0 8px 8px 0;
+  color: #7a4d06;
+}
+
+.cp-map__side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cp-map__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.cp-map__item {
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: var(--cp-ink, #24292b);
+  background: var(--cp-tint, #fbfaf7);
+  border: 1px solid var(--cp-line, #dedfd8);
+  border-left: 3px solid #7d8781;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cp-map__item:hover { background: #efece5; }
+.cp-map__item:focus-visible { outline: 3px solid var(--cp-ink, #24292b); outline-offset: 2px; }
+.cp-map__item.is-selected { border-left-color: var(--cp-brand, #a51d2d); outline: 2px solid var(--cp-brand, #a51d2d); outline-offset: 1px; }
+.cp-map__item-name { font-size: 12.5px; font-weight: 700; }
+.cp-map__item-meta { font-size: 11px; color: #7b837f; }
+
+.cp-map__details {
+  padding: 10px 12px;
+  background: var(--cp-tint, #fbfaf7);
+  border: 1px solid var(--cp-line, #dedfd8);
+  border-radius: 10px;
+}
+
+.cp-map__details-line { margin: 4px 0 0; font-size: 12px; color: #3b423f; overflow-wrap: anywhere; }
+
+.cp-map__attribution { margin-top: 14px; }
+
+/* Markers are divIcons, so no image assets or icon-path workarounds are needed. */
+.cp-map__pin {
+  background: var(--cp-brand, #a51d2d);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.cp-map__pin--student-center { background: #2f6b45; }
+
+/* Keyboard focus must be obvious on the map markers. */
+.cp-map__pin:focus-visible {
+  outline: 3px solid var(--cp-ink, #24292b);
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
+@media (max-width: 840px) {
+  .cp-map-mount { padding: 0 18px 10px; }
+  .cp-map__layout { grid-template-columns: 1fr; }
+  .cp-map__canvas { height: 300px; }
+  .cp-map__list { max-height: none; }
+}

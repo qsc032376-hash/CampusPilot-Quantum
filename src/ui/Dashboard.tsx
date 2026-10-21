@@ -9,6 +9,7 @@ import { ScheduleResults } from './components/ScheduleResults.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
 import { RecommendedLocations } from './components/RecommendedLocations.tsx';
 import { ReservationPlanner } from './components/ReservationPlanner.tsx';
+import { CampusMap } from '../features/campus-map/CampusMap.tsx';
 import { createResetState } from './dashboardReset.ts';
 import './ui.css';
 
@@ -104,6 +105,10 @@ export function Dashboard({ request: initialRequest }: DashboardProps) {
 
       <div className="cp-reservation">
         <ReservationPlanner />
+      </div>
+
+      <div className="cp-map-mount">
+        <CampusMap />
       </div>
 
       <footer className="cp-foot">
