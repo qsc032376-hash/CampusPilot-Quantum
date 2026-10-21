@@ -94,6 +94,9 @@ async function main() {
     outdir: OUT_DIR,
     entryNames: 'bundle',
     jsx: 'automatic',
+    // Leaflet's stylesheet references marker images; inline them so the fixture
+    // needs no extra asset files.
+    loader: { '.png': 'dataurl', '.svg': 'dataurl', '.gif': 'dataurl' },
     logLevel: 'error',
   });
   await writeFile(path.join(OUT_DIR, 'index.html'), html, 'utf8');
@@ -439,6 +442,75 @@ async function main() {
     record(
       'HSL ordinary rules still show the two-hour limit',
       /official rules/i.test(hslText) && hslText.includes('2-hour reservations'),
+      '',
+    );
+
+    // --- campus map ---
+    await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (await evaluate("!!document.querySelector('#app .leaflet-container')")) break;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
+    record('map panel renders', await evaluate("!!document.querySelector('#app .cp-map')"), '');
+    record(
+      'leaflet map initialises with a visible canvas',
+      await evaluate(`(() => {
+        const el = document.querySelector('#app .leaflet-container');
+        if (!el) return false;
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      })()`),
+      '',
+    );
+    record(
+      'OSM attribution is visible on the map',
+      await evaluate(`(() => {
+        const el = document.querySelector('#app .leaflet-control-attribution');
+        return !!el && el.textContent.includes('OpenStreetMap');
+      })()`),
+      '',
+    );
+    record(
+      'map lists the five verified locations',
+      (await evaluate("document.querySelectorAll('#app .cp-map__item').length")) === 5,
+      '',
+    );
+    record(
+      'map draws five markers',
+      (await evaluate("document.querySelectorAll('#app .cp-map__pin').length")) === 5,
+      '',
+    );
+
+    await evaluate("document.querySelectorAll('#app .cp-map__item')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const mapText = await evaluate("document.querySelector('#app .cp-map').innerText");
+    record(
+      'selecting a location shows its details and official link',
+      mapText.includes('approximate building point') && mapText.includes('Official location page'),
+      '',
+    );
+    record('map makes no live-availability claim', !/available now|open now|rooms? free/i.test(mapText), '');
+
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app .cp-map__filter')].find((item) =>
+        item.textContent.includes('Student center'),
+      );
+      if (!button) return 'missing';
+      button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    record(
+      'category filter removes the hidden category from the list',
+      (await evaluate("document.querySelectorAll('#app .cp-map__item').length")) === 4,
+      '',
+    );
+    record(
+      'return-to-campus-view control exists',
+      await evaluate(
+        "[...document.querySelectorAll('#app .cp-map__filter')].some((item) => item.textContent.includes('Return to campus view'))",
+      ),
       '',
     );
   } finally {

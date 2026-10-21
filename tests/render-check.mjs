@@ -14,6 +14,7 @@ import { ScheduleResults } from './src/ui/components/ScheduleResults.tsx';
 import { LocationCard } from './src/ui/components/LocationCard.tsx';
 import { RecommendedLocations } from './src/ui/components/RecommendedLocations.tsx';
 import { ReservationPlanner } from './src/ui/components/ReservationPlanner.tsx';
+import { CampusMap } from './src/features/campus-map/CampusMap.tsx';
 import { TaskForm } from './src/ui/components/TaskForm.tsx';
 import { sampleRequest } from './src/sample.ts';
 import { generateMockSchedule } from './src/scheduler.ts';
@@ -366,6 +367,27 @@ check(
   '',
 );
 check('reservation planner makes no confirmation claim', !plannerHtml.includes('Officially confirmed'), '');
+
+// --- campus map (server render: list and notices work without Leaflet) ---
+const mapHtml = renderToStaticMarkup(createElement(CampusMap));
+check(
+  'map panel renders the verified locations as a list',
+  ['Thompson Library', '18th Avenue Library', 'Health Sciences Library', 'FAES Library', 'Ohio Union'].every(
+    (name) => mapHtml.includes(name),
+  ),
+  '',
+);
+check(
+  'map panel carries the OpenStreetMap attribution and licence link',
+  mapHtml.includes('OpenStreetMap contributors') && mapHtml.includes('https://www.openstreetmap.org/copyright'),
+  '',
+);
+check(
+  'map panel states building points and no live status',
+  mapHtml.includes('approximate building points') && mapHtml.includes('No live opening hours'),
+  '',
+);
+check('map panel makes no availability or booking claim', !/available now|open now|rooms? free/i.test(mapHtml), '');
 
 const failed = results.filter((ok) => !ok).length;
 console.log('\\nSUMMARY ' + (results.length - failed) + '/' + results.length + ' passed');
