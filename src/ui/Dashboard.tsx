@@ -184,8 +184,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const dayWindows = multi?.days ?? preview.windows.map((window, index) => ({ ...window, date: preview.dates[index] }));
 
   const rangeLabel = preview.windows[0]
-    ? `${rangeDayCountLabel(range)} from ${formatDay(preview.windows[0].windowStart)} · ${range.startTime}�?{range.endTime} ${CAMPUS_TIME_ZONE}`
-    : `${range.startDate} · ${range.startTime}�?{range.endTime}`;
+    ? `${rangeDayCountLabel(range)} from ${formatDay(preview.windows[0].windowStart)} · ${range.startTime}–${range.endTime} ${CAMPUS_TIME_ZONE}`
+    : `${range.startDate} · ${range.startTime}–${range.endTime}`;
 
   const selectedBlock = multi?.result.blocks.find((block) => block.id === selectedId) ?? null;
 
@@ -282,7 +282,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
             <p className="cp-panel__foot">
               Switching the viewed day does not re-run the planner. Changing the range or the task list does. Events
-              labelled “Example · �?are demo data, not real courses, and they say nothing about room availability.
+              labelled “Example · ” are demo data, not real courses, and they say nothing about room availability.
             </p>
           </section>
 

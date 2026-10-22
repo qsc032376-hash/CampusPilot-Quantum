@@ -253,6 +253,49 @@ async function main() {
     const third = await clickAt(aCenter.x, aCenter.y);
     record('clicking A again selects A', third === 'A', `selected=${third}`);
 
+    // --- header range summary and readable example note (D regression) ---
+    const headerText = () => evaluate("document.querySelector('#app .cp-header').innerText");
+    const setEndTime = async (value) => {
+      await evaluate([
+        '(() => {',
+        "  const inputs = [...document.querySelectorAll('#app section[aria-labelledby=\"cp-range-heading\"] input[type=\"time\"]')];",
+        '  const input = inputs[1];',
+        '  if (!input) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        '  setter.call(input, ' + JSON.stringify(value) + ');',
+        "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+
+    const defaultHeader = await headerText();
+    record('header shows the default 09:00–17:00 range', defaultHeader.includes('09:00–17:00'), defaultHeader);
+    record(
+      'page renders no replacement characters',
+      !(await evaluate('document.body.innerText')).includes(String.fromCharCode(0xfffd)),
+      '',
+    );
+
+    await setEndTime('18:00');
+    const editedHeader = await headerText();
+    record('header follows the edited end time', editedHeader.includes('09:00–18:00'), editedHeader);
+    record('the un-interpolated placeholder is gone', !editedHeader.includes('{range.endTime}'), editedHeader);
+
+    const exampleNote = await evaluate(
+      "document.querySelector('#app section[aria-labelledby=\"cp-range-heading\"] .cp-panel__foot').innerText",
+    );
+    record(
+      'the example note is readable and marks demo data',
+      exampleNote.includes('demo data') &&
+        exampleNote.includes('not real courses') &&
+        !exampleNote.includes(String.fromCharCode(0xfffd)),
+      exampleNote,
+    );
+
+    await setEndTime('17:00');
+
     // Shared contract integration, rendered by the real Dashboard.
     // Pin the range to the bundled sample date so the assertions stay deterministic.
     await evaluate("document.querySelector('#app .cp-schedule').scrollIntoView({block:'start'})");
