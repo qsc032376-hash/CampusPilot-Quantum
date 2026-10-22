@@ -261,7 +261,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             </div>
 
             <p className="cp-panel__foot">
-              Switching the viewed day does not re-run the planner. Changing the range or the task list does.
+              Switching the viewed day does not re-run the planner. Changing the range or the task list does. Events
+              labelled “Example · ” are demo data, not real courses, and they say nothing about room availability.
             </p>
           </section>
 
