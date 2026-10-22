@@ -52,12 +52,12 @@ npm run preview
 Manual smoke test:
 
 1. Start `npm run dev` and open its URL.
-2. Click **Build my day**.
-3. Expect three sessions on October 19, 2026, in Columbus time: calculus at 11:00 AM, writing at 1:00 PM, and CSE at 3:00 PM. Extended reading should appear under **Needs another time**.
-4. Click **Rebuild my day**: the output should be identical. Reset restores the sample and clears the form and plan.
-5. The 07:00-08:00 early class is outside the window and hidden. The 08:00-10:00 morning class is drawn only from 09:00, with a clipped-start marker.
-6. Advising (14:30-15:00) overlaps Math (14:00-15:00). The response reports 30 minutes; conflict highlighting is a follow-up UI change, not yet displayed by this PR.
-7. Check a narrow browser window and keyboard navigation.
+2. The schedule range defaults to **7 consecutive days starting tomorrow in New York**, with daily study hours 09:00–17:00. Switch between **Single day** and **7 consecutive days**, change the start date or the daily hours.
+3. Click **Build plan**. Results are grouped by day; each day lists its own sessions, and a day with nothing placed says "No study blocks planned for this day."
+4. Use the day tabs (or the per-day rows in the result panel) to view one day's timeline at a time. Switching the viewed day does not re-run the planner; changing the range or the task list does.
+5. Add or remove a task: an already-built plan is regenerated. **Reset** clears the range, viewed day, form draft, errors, plan and selection.
+6. The bundled sample data is fixed to 2026-10-19 and is kept for regression tests, so in the default future range it may produce no placed sessions and an "needs another time" entry explaining the deadline is earlier than the range. Days without listed commitments are never described as days without classes: only commitments dated inside the shown window are drawn.
+7. Conflict highlighting, priority and course-code tagging behave as before. Check a narrow browser window and keyboard navigation.
 
 ## Shared contracts and implementation
 

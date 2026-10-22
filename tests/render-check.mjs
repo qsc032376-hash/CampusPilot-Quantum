@@ -18,11 +18,28 @@ import { CampusMap } from './src/features/campus-map/CampusMap.tsx';
 import { TaskForm } from './src/ui/components/TaskForm.tsx';
 import { sampleRequest } from './src/sample.ts';
 import { generateMockSchedule } from './src/scheduler.ts';
+import { createDailyWindows, generateMultiDaySchedule } from './src/features/multi-day-schedule/index.ts';
 
 const results = [];
 function check(name, ok, detail) {
   results.push(ok);
   console.log((ok ? 'PASS  ' : 'FAIL  ') + name + (detail ? ' :: ' + detail : ''));
+}
+
+/** Props for the now per-day timeline component. */
+function scheduleProps(request, blocks, conflicts) {
+  return {
+    windowStart: request.windowStart,
+    windowEnd: request.windowEnd,
+    dayLabel: 'Test day',
+    classes: request.classes,
+    unavailablePeriods: request.unavailablePeriods,
+    blocks,
+    conflicts: conflicts || [],
+    hasPlan: true,
+    selectedId: null,
+    onSelect: () => {},
+  };
 }
 
 const box = (style) => ({
@@ -61,7 +78,7 @@ const shortResult = {
 };
 
 const html = renderToStaticMarkup(
-  createElement(WeeklySchedule, { request: fallBackRequest, result: shortResult, selectedId: null, onSelect: () => {} }),
+  createElement(WeeklySchedule, scheduleProps(fallBackRequest, shortResult.blocks)),
 );
 
 const blocks = blocksOf(html);
@@ -94,12 +111,10 @@ const adjacentResult = {
   unscheduledTasks: [],
 };
 const adjacentHtml = renderToStaticMarkup(
-  createElement(WeeklySchedule, {
-    request: { ...fallBackRequest, classes: [], unavailablePeriods: [] },
-    result: adjacentResult,
-    selectedId: null,
-    onSelect: () => {},
-  }),
+  createElement(
+    WeeklySchedule,
+    scheduleProps({ ...fallBackRequest, classes: [], unavailablePeriods: [] }, adjacentResult.blocks),
+  ),
 );
 const adjacentSlots = slotsOf(adjacentHtml).sort((a, b) => a.top - b.top);
 check(
@@ -118,7 +133,7 @@ const normalRequest = {
   locations: [],
 };
 const normalHtml = renderToStaticMarkup(
-  createElement(WeeklySchedule, { request: normalRequest, result: null, selectedId: null, onSelect: () => {} }),
+  createElement(WeeklySchedule, scheduleProps(normalRequest, [])),
 );
 const normalBlocks = blocksOf(normalHtml);
 check(
@@ -130,11 +145,18 @@ check('window label carries both zones', normalHtml.includes('EDT') || normalHtm
 
 // --- shared contracts: conflicts, location details, task metadata ---
 const contractResult = generateMockSchedule(sampleRequest);
+const sampleMulti = generateMultiDaySchedule({
+  windows: createDailyWindows({ startDate: '2026-10-19', dayCount: 1, startTime: '09:00', endTime: '17:00' }),
+  tasks: sampleRequest.tasks,
+  classes: sampleRequest.classes,
+  unavailablePeriods: sampleRequest.unavailablePeriods,
+  locations: sampleRequest.locations,
+});
 const conflicts = contractResult.conflicts || [];
 check('sample schedule reports one conflict pair', conflicts.length === 1, JSON.stringify(conflicts));
 
 const conflictScheduleHtml = renderToStaticMarkup(
-  createElement(WeeklySchedule, { request: sampleRequest, result: contractResult, selectedId: null, onSelect: () => {} }),
+  createElement(WeeklySchedule, scheduleProps(sampleRequest, contractResult.blocks, contractResult.conflicts)),
 );
 check(
   'conflicting events carry a conflict marker and badge',
@@ -147,11 +169,13 @@ check('conflict count is announced to the user', conflictScheduleHtml.includes('
 const conflictResultsHtml = renderToStaticMarkup(
   createElement(ScheduleResults, {
     request: sampleRequest,
-    result: contractResult,
+    multi: sampleMulti,
     message: null,
     onBuild: () => {},
+    selectedDate: '2026-10-19',
     selectedId: null,
     onSelect: () => {},
+    onSelectDate: () => {},
   }),
 );
 check(

@@ -63,7 +63,18 @@ function Fixture() {
   return (
     <>
       <div className="cp-app" id="layout">
-        <WeeklySchedule request={request} result={result} selectedId={selected} onSelect={setSelected} />
+        <WeeklySchedule
+          windowStart={request.windowStart}
+          windowEnd={request.windowEnd}
+          dayLabel="Edge day"
+          classes={request.classes}
+          unavailablePeriods={request.unavailablePeriods}
+          blocks={result.blocks}
+          conflicts={[]}
+          hasPlan
+          selectedId={selected}
+          onSelect={setSelected}
+        />
         <p id="selected">{selected ?? 'none'}</p>
       </div>
       <div id="app">
@@ -234,9 +245,19 @@ async function main() {
     record('clicking A again selects A', third === 'A', `selected=${third}`);
 
     // Shared contract integration, rendered by the real Dashboard.
+    // Pin the range to the bundled sample date so the assertions stay deterministic.
     await evaluate("document.querySelector('#app .cp-schedule').scrollIntoView({block:'start'})");
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      if (!input) return 'missing';
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-19');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
     await evaluate(
-      "[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Build my day')).click()",
+      "[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Build plan')).click()",
     );
     await new Promise((resolve) => setTimeout(resolve, 400));
 

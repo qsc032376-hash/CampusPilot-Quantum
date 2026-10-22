@@ -1,4 +1,4 @@
-import type { ScheduleRequest, ScheduleResponse } from '../../types.ts';
+import type { ClassEvent, ScheduleConflict, StudyBlock, UnavailablePeriod } from '../../types.ts';
 import {
   abbreviationAt,
   clipToWindow,
@@ -11,8 +11,16 @@ import {
 } from '../format.ts';
 
 interface WeeklyScheduleProps {
-  request: ScheduleRequest;
-  result: ScheduleResponse | null;
+  /** Window of the day currently being viewed; null when no day is selected. */
+  windowStart: string | null;
+  windowEnd: string | null;
+  dayLabel: string;
+  classes: readonly ClassEvent[];
+  unavailablePeriods: readonly UnavailablePeriod[];
+  blocks: readonly StudyBlock[];
+  conflicts?: readonly ScheduleConflict[];
+  /** True once a schedule has been generated for the current range. */
+  hasPlan: boolean;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }
@@ -32,29 +40,47 @@ interface TimelineItem {
 }
 
 /**
- * The visual hero: a timeline built from the request window.
+ * The visual hero: a timeline for one selected day.
  *
  * Positions come from real timestamp differences, so elapsed time is never
- * negative across a fall-back hour and the repeated hour occupies its own
- * space. Events outside the window are dropped; partially visible events are
- * clipped for drawing only and keep their original data.
- *
- * A block's box is exactly its visible span: no padding, no minimum height, and
- * labels live in a separate absolutely positioned layer. Study blocks get a
- * click target that may grow into empty space, but never beyond the gap to a
- * neighbouring block, so a click can only ever select the block under it.
+ * negative across a fall-back hour. Commitments are passed through unchanged and
+ * only drawn when they intersect this day's window; a day with no listed
+ * commitments is never described as a day without classes.
  */
-export function WeeklySchedule({ request, result, selectedId, onSelect }: WeeklyScheduleProps) {
-  const windowStartMs = Date.parse(request.windowStart);
-  const totalMinutes = elapsedMinutes(request.windowEnd, request.windowStart);
+export function WeeklySchedule({
+  windowStart,
+  windowEnd,
+  dayLabel,
+  classes,
+  unavailablePeriods,
+  blocks: studyBlocks,
+  conflicts = [],
+  hasPlan,
+  selectedId,
+  onSelect,
+}: WeeklyScheduleProps) {
+  if (!windowStart || !windowEnd) {
+    return (
+      <section className="cp-panel cp-schedule" aria-labelledby="cp-schedule-heading">
+        <div className="cp-panel__head">
+          <h2 id="cp-schedule-heading">Your schedule</h2>
+          <p className="cp-panel__meta">Choose a day to see its timeline.</p>
+        </div>
+        <p className="cp-hint">Start date or daily hours are not valid yet.</p>
+      </section>
+    );
+  }
+
+  const windowStartMs = Date.parse(windowStart);
+  const totalMinutes = elapsedMinutes(windowEnd, windowStart);
   const timelineHeight = Math.max(HOUR_HEIGHT, (totalMinutes / 60) * HOUR_HEIGHT);
-  const showZone = windowSpansTransition(request.windowStart, request.windowEnd);
-  const crossDay = formatDayShort(request.windowStart) !== formatDayShort(request.windowEnd);
+  const showZone = windowSpansTransition(windowStart, windowEnd);
+  const crossDay = formatDayShort(windowStart) !== formatDayShort(windowEnd);
 
   const items: TimelineItem[] = [
-    ...request.classes.map((event) => ({ id: event.id, title: event.title, kind: 'class' as const, start: event.start, end: event.end })),
-    ...request.unavailablePeriods.map((period) => ({ id: period.id, title: period.title, kind: 'busy' as const, start: period.start, end: period.end })),
-    ...(result?.blocks ?? []).map((block) => ({ id: block.id, title: block.title, kind: 'study' as const, start: block.start, end: block.end })),
+    ...classes.map((event) => ({ id: event.id, title: event.title, kind: 'class' as const, start: event.start, end: event.end })),
+    ...unavailablePeriods.map((period) => ({ id: period.id, title: period.title, kind: 'busy' as const, start: period.start, end: period.end })),
+    ...studyBlocks.map((block) => ({ id: block.id, title: block.title, kind: 'study' as const, start: block.start, end: block.end })),
   ];
 
   const ticks: { offset: number; label: string }[] = [];
@@ -69,9 +95,9 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
     previousDay = day;
   }
 
-  const blocks = items
+  const visible = items
     .map((item) => {
-      const span = clipToWindow(item.start, item.end, request.windowStart, request.windowEnd);
+      const span = clipToWindow(item.start, item.end, windowStart, windowEnd);
       if (!span) return null;
       const top = Math.min(Math.max(0, (span.offsetMinutes / 60) * HOUR_HEIGHT), timelineHeight);
       const height = Math.max(0, Math.min((span.durationMinutes / 60) * HOUR_HEIGHT, timelineHeight - top));
@@ -82,7 +108,7 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
   // A click target may grow only into genuinely empty time, so it never covers
   // a neighbour's visible rectangle.
   const hitGaps = new Map<string, { up: number; down: number }>();
-  const ordered = [...blocks].sort((a, b) => a.top - b.top);
+  const ordered = [...visible].sort((a, b) => a.top - b.top);
   ordered.forEach((entry, index) => {
     const previous = ordered[index - 1];
     const next = ordered[index + 1];
@@ -94,12 +120,10 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
     });
   });
 
-  const hasStudyBlocks = (result?.blocks.length ?? 0) > 0;
-  const isEmpty = blocks.length === 0 && !result;
+  const hasStudyBlocks = studyBlocks.length > 0;
+  const hasCommitments = visible.some((entry) => entry.item.kind !== 'study');
+  const isEmpty = visible.length === 0 && !hasPlan;
 
-  // Conflicts come from the shared scheduler response; this component only
-  // decorates the events involved and never recomputes overlaps itself.
-  const conflicts = result?.conflicts ?? [];
   const conflictIds = new Set<string>();
   for (const conflict of conflicts) {
     conflictIds.add(conflict.firstId);
@@ -110,7 +134,9 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
     <section className="cp-panel cp-schedule" aria-labelledby="cp-schedule-heading">
       <div className="cp-panel__head">
         <h2 id="cp-schedule-heading">Your schedule</h2>
-        <p className="cp-panel__meta">{formatWindowLabel(request.windowStart, request.windowEnd)}</p>
+        <p className="cp-panel__meta">
+          {dayLabel} · {formatWindowLabel(windowStart, windowEnd)}
+        </p>
       </div>
 
       <ul className="cp-legend">
@@ -144,12 +170,12 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
             <span key={tick.offset} className="cp-timeline__line" style={{ top: `${(tick.offset / 60) * HOUR_HEIGHT}px` }} aria-hidden="true" />
           ))}
 
-          {blocks.map(({ item, span, top, height }) => {
+          {visible.map(({ item, span, top, height }) => {
             const style = { top: `${top}px`, height: `${height}px` };
             const timeLabel = formatRangeDetailed(item.start, item.end, showZone);
             const clipped = span.clippedStart || span.clippedEnd;
             const isConflict = conflictIds.has(item.id);
-            const label = `${item.title}, ${timeLabel}${clipped ? ', partly outside the window' : ''}${isConflict ? ', conflicting event' : ''}`;
+            const label = `${item.title}, ${timeLabel}${clipped ? ', partly outside this day' : ''}${isConflict ? ', conflicting event' : ''}`;
             const clipClass = `${span.clippedStart ? ' is-clipped-start' : ''}${span.clippedEnd ? ' is-clipped-end' : ''}`;
             const tiny = height < TINY_HEIGHT ? ' is-tiny' : '';
             const conflictClass = isConflict ? ' is-conflict' : '';
@@ -187,7 +213,7 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
                     onClick={() => onSelect(isSelected ? null : item.id)}
                     aria-pressed={isSelected}
                     aria-label={label}
-                    title={clipped ? `${timeLabel} (partly outside the window)` : timeLabel}
+                    title={clipped ? `${timeLabel} (partly outside this day)` : timeLabel}
                   />
                 </div>
               );
@@ -214,6 +240,7 @@ export function WeeklySchedule({ request, result, selectedId, onSelect }: Weekly
         {hasStudyBlocks
           ? 'Study blocks are suggestions. Select one to see its location.'
           : 'Study blocks appear here once the schedule is built.'}
+        {!hasCommitments && ' Only commitments dated inside this window are drawn; a day without listed class data is not evidence of a free day.'}
         {conflicts.length > 0 &&
           ` ${conflicts.length} conflicting ${conflicts.length === 1 ? 'pair' : 'pairs'} reported by the scheduler.`}
         {totalMinutes > 0 && ` Visible window: ${Math.round(totalMinutes / 60)} hours.`}
