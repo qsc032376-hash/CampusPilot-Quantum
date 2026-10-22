@@ -21,6 +21,7 @@ import {
   rangeDayCountLabel,
 } from './scheduleRange.ts';
 import type { ScheduleRange, ScheduleRangeMode } from './scheduleRange.ts';
+import { rangeError, resolveSelection } from './scheduleState.ts';
 import './ui.css';
 
 interface DashboardProps {
@@ -47,6 +48,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [request, setRequest] = useState<ScheduleRequest>(initialRequest);
   const [range, setRange] = useState<ScheduleRange>(initialRange);
   const [multi, setMulti] = useState<MultiDayScheduleResponse | null>(null);
+  /** True once a plan has succeeded; drives recovery after an invalid edit. */
+  const [hasBuilt, setHasBuilt] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(initialRange.startDate);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -79,6 +82,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       });
       setMulti(output);
       setMessage(null);
+      setHasBuilt(true);
       return output;
     } catch (error) {
       setMulti(null);
@@ -87,16 +91,20 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     }
   }
 
-  /** A selection that no longer exists after re-planning is cleared. */
-  function pruneSelection(output: MultiDayScheduleResponse, currentId: string | null) {
-    if (!currentId) return;
-    if (!output.result.blocks.some((block) => block.id === currentId)) setSelectedId(null);
+  /**
+   * Keeps the selection consistent with a fresh plan: it follows its block to a
+   * new day, or is cleared when the block no longer exists.
+   */
+  function syncSelection(output: MultiDayScheduleResponse, currentId: string | null) {
+    const resolved = resolveSelection(output, currentId);
+    setSelectedId(resolved.id);
+    if (resolved.date) setSelectedDate(resolved.date);
   }
 
   function handleBuild() {
     const output = runSchedule(request, range);
     if (!output) return;
-    pruneSelection(output, selectedId);
+    syncSelection(output, selectedId);
     if (output.days.length > 0 && !output.days.some((day) => day.date === selectedDate)) {
       setSelectedDate(output.days[0].date);
     }
@@ -105,9 +113,9 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   /** Applies a request change and keeps an already-built plan in sync. */
   function applyRequest(next: ScheduleRequest) {
     setRequest(next);
-    if (!multi) return;
+    if (!hasBuilt) return;
     const output = runSchedule(next, range);
-    if (output) pruneSelection(output, selectedId);
+    if (output) syncSelection(output, selectedId);
   }
 
   function handleAddTask(draft: TaskDraft) {
@@ -121,10 +129,21 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
   function handleRangeChange(patch: Partial<ScheduleRange>) {
     const next: ScheduleRange = { ...range, ...patch };
+    const invalid = rangeError(next);
     setRange(next);
     setSelectedDate(next.startDate);
     setSelectedId(null);
-    if (multi) runSchedule(request, next);
+
+    if (invalid) {
+      // An invalid range must never keep presenting the previous plan as current.
+      setMulti(null);
+      setMessage(invalid);
+      return;
+    }
+
+    setMessage(null);
+    // A plan the user already generated is recomputed; otherwise nothing is shown.
+    if (hasBuilt) runSchedule(request, next);
   }
 
   /** Switching the viewed day never re-runs the planner. */
@@ -152,6 +171,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setFormKey(next.formKey);
     setRange(freshRange);
     setSelectedDate(freshRange.startDate);
+    setHasBuilt(false);
   }
 
   const activeDay = multi?.days.find((day) => day.date === selectedDate) ?? null;
@@ -164,8 +184,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const dayWindows = multi?.days ?? preview.windows.map((window, index) => ({ ...window, date: preview.dates[index] }));
 
   const rangeLabel = preview.windows[0]
-    ? `${rangeDayCountLabel(range)} from ${formatDay(preview.windows[0].windowStart)} · ${range.startTime}–${range.endTime} ${CAMPUS_TIME_ZONE}`
-    : `${range.startDate} · ${range.startTime}–${range.endTime}`;
+    ? `${rangeDayCountLabel(range)} from ${formatDay(preview.windows[0].windowStart)} · ${range.startTime}�?{range.endTime} ${CAMPUS_TIME_ZONE}`
+    : `${range.startDate} · ${range.startTime}�?{range.endTime}`;
 
   const selectedBlock = multi?.result.blocks.find((block) => block.id === selectedId) ?? null;
 
@@ -262,7 +282,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
             <p className="cp-panel__foot">
               Switching the viewed day does not re-run the planner. Changing the range or the task list does. Events
-              labelled “Example · ” are demo data, not real courses, and they say nothing about room availability.
+              labelled “Example · �?are demo data, not real courses, and they say nothing about room availability.
             </p>
           </section>
 

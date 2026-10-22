@@ -10,6 +10,7 @@ import {
   rangeDayCountLabel,
 } from '../src/ui/scheduleRange.ts';
 import { DEFAULT_END_TIME, DEFAULT_START_TIME } from '../src/ui/scheduleRange.ts';
+import { rangeError, resolveSelection } from '../src/ui/scheduleState.ts';
 
 test('campus dates come from New York, not the host time zone', () => {
   // 03:00 UTC on Oct 20 is still Oct 19 in New York (23:00 EDT).
@@ -80,4 +81,41 @@ test('daily hours must end after they start', () => {
   assert.throws(() =>
     buildDailyWindows({ mode: 'single', startDate: '2026-10-20', startTime: '17:00', endTime: '09:00' }),
   );
+});
+
+// --- selection and range-validity state helpers -----------------------------
+
+const PLAN = {
+  days: [
+    { date: '2026-10-20', windowStart: '2026-10-20T13:00:00.000Z', windowEnd: '2026-10-20T21:00:00.000Z', result: { blocks: [] } },
+    { date: '2026-10-21', windowStart: '2026-10-21T13:00:00.000Z', windowEnd: '2026-10-21T21:00:00.000Z', result: { blocks: [] } },
+  ],
+  result: {
+    blocks: [
+      { id: 'study-math', taskId: 'math', title: 'Math', start: '2026-10-21T14:00:00.000Z', end: '2026-10-21T15:00:00.000Z', locationId: 'lib' },
+    ],
+    unscheduledTasks: [],
+  },
+};
+
+test('a selection follows its block to the new day', () => {
+  assert.deepEqual(resolveSelection(PLAN, 'study-math'), { id: 'study-math', date: '2026-10-21' });
+});
+
+test('a selection whose block disappeared is cleared', () => {
+  assert.deepEqual(resolveSelection(PLAN, 'study-gone'), { id: null, date: null });
+  assert.deepEqual(resolveSelection(PLAN, null), { id: null, date: null });
+});
+
+test('range validity reports the exact validation message', () => {
+  const valid = { mode: 'week', startDate: '2026-10-20', startTime: '09:00', endTime: '17:00' } as const;
+  assert.equal(rangeError(valid), null);
+
+  const inverted = { mode: 'week', startDate: '2026-10-20', startTime: '17:00', endTime: '08:00' } as const;
+  const message = rangeError(inverted);
+  assert.ok(typeof message === 'string' && message.length > 0);
+
+  // Editing back to valid hours clears the error again, which is what the UI relies on.
+  const restored = { mode: 'week', startDate: '2026-10-20', startTime: '09:00', endTime: '17:00' } as const;
+  assert.equal(rangeError(restored), null);
 });

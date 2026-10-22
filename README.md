@@ -56,7 +56,7 @@ Manual smoke test:
 3. Click **Build plan**. Results are grouped by day; each day lists its own sessions, and a day with nothing placed says "No study blocks planned for this day."
 4. Use the day tabs (or the per-day rows in the result panel) to view one day's timeline at a time. Switching the viewed day does not re-run the planner; changing the range or the task list does.
 5. Add or remove a task: an already-built plan is regenerated. **Reset** clears the range, viewed day, form draft, errors, plan and selection.
-6. The bundled sample data is fixed to 2026-10-19 and is kept for regression tests, so in the default future range it may produce no placed sessions and an "needs another time" entry explaining the deadline is earlier than the range. Days without listed commitments are never described as days without classes: only commitments dated inside the shown window are drawn.
+6. The running page now generates **labelled example data relative to the current New York date**, so the default seven-day range always contains example sessions. Every generated class, commitment and task title starts with “Example · ”, and these events are demo data: they are not real courses, opening hours or room availability. The fixed 2026-10-19 fixture in `src/sample.ts` is kept for regression tests and is no longer what the page displays. Only commitments dated inside the shown window are drawn, so a day without listed commitments is never described as a day without classes.
 7. Conflict highlighting, priority and course-code tagging behave as before. Check a narrow browser window and keyboard navigation.
 
 ## Shared contracts and implementation
