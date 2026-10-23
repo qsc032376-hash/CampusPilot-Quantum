@@ -24,9 +24,15 @@ test('the range summary interpolates both times with a real en dash', () => {
   assert.equal([...text.matchAll(/\$\{range\.endTime\}/g)].length >= 2, true);
 });
 
+test('the runtime sample prefix is the readable middle dot', () => {
+  const text = strictDecode(readFileSync(new URL('../src/ui/sampleRuntime.ts', import.meta.url)));
+  assert.match(text, /RUNTIME_SAMPLE_PREFIX = 'Example \u00b7 '/);
+  assert.equal(text.includes('\uFFFD'), false);
+});
+
 test('the example note stays readable and marks the data as demo', () => {
   const text = strictDecode(source);
   assert.match(text, /labelled “Example · ” are demo data, not real courses/);
-  assert.match(text, /room availability/);
-  assert.match(text, /Personal study planning only/);
+  assert.match(text, /room\s+availability/);
+  assert.match(text, /consecutive New York calendar days/);
 });

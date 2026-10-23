@@ -2,9 +2,12 @@ import { useMemo, useState } from 'react';
 import type { ScheduleRequest } from '../types.ts';
 import type { MultiDayScheduleResponse } from '../features/multi-day-schedule/index.ts';
 import { generateMultiDaySchedule } from '../features/multi-day-schedule/index.ts';
+import type { TaskSeries } from '../features/recurring-tasks/index.ts';
 import { AppHeader } from './components/AppHeader.tsx';
 import { TaskForm } from './components/TaskForm.tsx';
 import type { TaskDraft } from './components/TaskForm.tsx';
+import { RecurringTaskForm } from './components/RecurringTaskForm.tsx';
+import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
@@ -12,15 +15,20 @@ import { RecommendedLocations } from './components/RecommendedLocations.tsx';
 import { ReservationPlanner } from './components/ReservationPlanner.tsx';
 import { CampusMap } from '../features/campus-map/CampusMap.tsx';
 import { createResetState } from './dashboardReset.ts';
-import { CAMPUS_TIME_ZONE, formatDay, formatDayShort } from './format.ts';
+import { CAMPUS_TIME_ZONE, formatDay } from './format.ts';
 import {
+  DAY_COUNT_PRESETS,
+  MAX_DAY_COUNT,
+  MIN_DAY_COUNT,
   buildDailyWindows,
   campusDateOf,
+  clampDayCount,
   defaultScheduleRange,
   rangeDates,
   rangeDayCountLabel,
+  dayCountError,
 } from './scheduleRange.ts';
-import type { ScheduleRange, ScheduleRangeMode } from './scheduleRange.ts';
+import type { ScheduleRange } from './scheduleRange.ts';
 import { rangeError, resolveSelection } from './scheduleState.ts';
 import './ui.css';
 
@@ -39,13 +47,14 @@ function makeTaskId(): string {
 /**
  * Dashboard composition root.
  *
- * Owns the editable request, the multi-day range and A's schedule output. Every
- * placement decision is delegated to `generateMultiDaySchedule`; this component
- * only chooses the range and which day to display.
+ * Owns the editable request, the repeating series, the 1-30 day range and A's
+ * schedule output. Input state always keeps the original one-off tasks and
+ * series; `output.tasks` is display data and is never passed back in.
  */
 export function Dashboard({ request: initialRequest, now = () => new Date() }: DashboardProps) {
   const [initialRange] = useState<ScheduleRange>(() => defaultScheduleRange(now()));
   const [request, setRequest] = useState<ScheduleRequest>(initialRequest);
+  const [series, setSeries] = useState<TaskSeries[]>([]);
   const [range, setRange] = useState<ScheduleRange>(initialRange);
   const [multi, setMulti] = useState<MultiDayScheduleResponse | null>(null);
   /** True once a plan has succeeded; drives recovery after an invalid edit. */
@@ -54,6 +63,9 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [selectedDate, setSelectedDate] = useState(initialRange.startDate);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const [seriesFormKey, setSeriesFormKey] = useState(0);
+  /** Raw text of the day-count field, validated before it is applied. */
+  const [dayCountInput, setDayCountInput] = useState(() => String(initialRange.dayCount));
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -70,12 +82,17 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     }
   }, [range]);
 
-  function runSchedule(nextRequest: ScheduleRequest, nextRange: ScheduleRange): MultiDayScheduleResponse | null {
+  function runSchedule(
+    nextRequest: ScheduleRequest,
+    nextRange: ScheduleRange,
+    nextSeries: TaskSeries[],
+  ): MultiDayScheduleResponse | null {
     try {
       const windows = buildDailyWindows(nextRange);
       const output = generateMultiDaySchedule({
         windows,
         tasks: nextRequest.tasks,
+        taskSeries: nextSeries,
         classes: nextRequest.classes,
         unavailablePeriods: nextRequest.unavailablePeriods,
         locations: nextRequest.locations,
@@ -101,8 +118,36 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     if (resolved.date) setSelectedDate(resolved.date);
   }
 
+  /**
+   * Single gate for everything that could plan. It validates the raw day-count
+   * text first, so Build, task/series edits and range edits all refuse an
+   * invalid value instead of planning a silently corrected range.
+   */
+  function planWith(
+    rawDays: string,
+    nextRange: ScheduleRange,
+    nextRequest: ScheduleRequest,
+    nextSeries: TaskSeries[],
+  ): MultiDayScheduleResponse | null {
+    const dayFailure = dayCountError(rawDays);
+    if (dayFailure) {
+      setMulti(null);
+      setMessage(dayFailure);
+      return null;
+    }
+    const resolved: ScheduleRange = { ...nextRange, dayCount: Number(rawDays) };
+    setRange(resolved);
+    const rangeFailure = rangeError(resolved);
+    if (rangeFailure) {
+      setMulti(null);
+      setMessage(rangeFailure);
+      return null;
+    }
+    return runSchedule(nextRequest, resolved, nextSeries);
+  }
+
   function handleBuild() {
-    const output = runSchedule(request, range);
+    const output = planWith(dayCountInput, range, request, series);
     if (!output) return;
     syncSelection(output, selectedId);
     if (output.days.length > 0 && !output.days.some((day) => day.date === selectedDate)) {
@@ -114,7 +159,15 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   function applyRequest(next: ScheduleRequest) {
     setRequest(next);
     if (!hasBuilt) return;
-    const output = runSchedule(next, range);
+    const output = planWith(dayCountInput, range, next, series);
+    if (output) syncSelection(output, selectedId);
+  }
+
+  /** Applies a series change and keeps an already-built plan in sync. */
+  function applySeries(next: TaskSeries[]) {
+    setSeries(next);
+    if (!hasBuilt) return;
+    const output = planWith(dayCountInput, range, request, next);
     if (output) syncSelection(output, selectedId);
   }
 
@@ -127,23 +180,57 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setSelectedId((current) => (current === `study-${id}` ? null : current));
   }
 
+  function handleAddSeries(next: TaskSeries) {
+    applySeries([...series, next]);
+  }
+
+  function handleUpdateSeries(next: TaskSeries) {
+    applySeries(series.map((item) => (item.id === next.id ? next : item)));
+  }
+
+  function handleDeleteSeries(id: string) {
+    applySeries(series.filter((item) => item.id !== id));
+  }
+
   function handleRangeChange(patch: Partial<ScheduleRange>) {
+    const rawDays = patch.dayCount !== undefined ? String(patch.dayCount) : dayCountInput;
     const next: ScheduleRange = { ...range, ...patch };
-    const invalid = rangeError(next);
     setRange(next);
     setSelectedDate(next.startDate);
     setSelectedId(null);
+    if (patch.dayCount !== undefined) setDayCountInput(String(patch.dayCount));
 
-    if (invalid) {
-      // An invalid range must never keep presenting the previous plan as current.
+    // A time or date edit must not clear a day-count error, restore a previous
+    // value, or plan with an older valid number.
+    const dayFailure = dayCountError(rawDays);
+    if (dayFailure) {
       setMulti(null);
-      setMessage(invalid);
+      setMessage(dayFailure);
       return;
     }
-
+    const resolved: ScheduleRange = { ...next, dayCount: Number(rawDays) };
+    const rangeFailure = rangeError(resolved);
+    if (rangeFailure) {
+      setMulti(null);
+      setMessage(rangeFailure);
+      return;
+    }
     setMessage(null);
-    // A plan the user already generated is recomputed; otherwise nothing is shown.
-    if (hasBuilt) runSchedule(request, next);
+    if (hasBuilt) runSchedule(request, resolved, series);
+  }
+
+  /** Rejects out-of-range or non-numeric day counts instead of clamping them. */
+  function handleDayCountInput(value: string) {
+    setDayCountInput(value);
+    const invalid = dayCountError(value);
+    if (invalid) {
+      // Keep the raw value visible, report it, and never plan a corrected value.
+      setMessage(invalid);
+      setMulti(null);
+      setSelectedId(null);
+      return;
+    }
+    handleRangeChange({ dayCount: Number(value) });
   }
 
   /** Switching the viewed day never re-runs the planner. */
@@ -165,13 +252,16 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     const next = createResetState(initialRequest, formKey);
     const freshRange = defaultScheduleRange(now());
     setRequest(next.request);
+    setSeries([]);
     setMulti(null);
     setMessage(next.message);
     setSelectedId(next.selectedId);
     setFormKey(next.formKey);
     setRange(freshRange);
+    setDayCountInput(String(freshRange.dayCount));
     setSelectedDate(freshRange.startDate);
     setHasBuilt(false);
+    setSeriesFormKey((current) => current + 1);
   }
 
   const activeDay = multi?.days.find((day) => day.date === selectedDate) ?? null;
@@ -181,7 +271,9 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const windowEnd = activeDay?.windowEnd ?? previewWindow?.windowEnd ?? null;
 
   const dayDates = multi?.days.map((day) => day.date) ?? preview.dates;
-  const dayWindows = multi?.days ?? preview.windows.map((window, index) => ({ ...window, date: preview.dates[index] }));
+  const dayIndex = Math.max(0, dayDates.indexOf(selectedDate));
+  const canGoPrevious = dayIndex > 0;
+  const canGoNext = dayIndex >= 0 && dayIndex < dayDates.length - 1;
 
   const rangeLabel = preview.windows[0]
     ? `${rangeDayCountLabel(range)} from ${formatDay(preview.windows[0].windowStart)} · ${range.startTime}–${range.endTime} ${CAMPUS_TIME_ZONE}`
@@ -196,12 +288,30 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       <main className="cp-main">
         <div className="cp-column">
           <TaskForm
-            key={formKey}
+            key={`oneoff-${formKey}`}
             request={request}
             defaultDueIso={windowEnd}
             rangeStartIso={multi?.days[0]?.windowStart ?? preview.windows[0]?.windowStart ?? null}
             onAdd={handleAddTask}
             onRemove={handleRemoveTask}
+          />
+          <RecurringTaskForm
+            key={`series-${seriesFormKey}`}
+            series={series}
+            dates={preview.dates}
+            defaultStartDate={selectedDate}
+            rangeStart={range.startDate}
+            rangeEnd={preview.dates[preview.dates.length - 1] ?? range.startDate}
+            dueAtFor={(date) => {
+              const index = preview.dates.indexOf(date);
+              return index >= 0 ? preview.windows[index].windowEnd : null;
+            }}
+            onAddSeries={handleAddSeries}
+            onUpdateSeries={handleUpdateSeries}
+            onDeleteSeries={handleDeleteSeries}
+            onAddOneOff={(task: OneOffFromSeries) =>
+              applyRequest({ ...request, tasks: [...request.tasks, { id: makeTaskId(), ...task }] })
+            }
           />
           <LocationCard block={selectedBlock} request={request} />
           <RecommendedLocations block={selectedBlock} request={request} />
@@ -211,21 +321,24 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
           <section className="cp-panel" aria-labelledby="cp-range-heading">
             <div className="cp-panel__head">
               <h2 id="cp-range-heading">Schedule range</h2>
-              <p className="cp-panel__meta">Personal study planning only · all times {CAMPUS_TIME_ZONE}</p>
+              <p className="cp-panel__meta">
+                {MIN_DAY_COUNT}–{MAX_DAY_COUNT} consecutive New York calendar days · all times {CAMPUS_TIME_ZONE}
+              </p>
             </div>
 
             <div className="cp-form">
               <div className="cp-field-row cp-field-row--split">
                 <label className="cp-field">
-                  <span className="cp-field__label">Range</span>
-                  <select
+                  <span className="cp-field__label">Days</span>
+                  <input
                     className="cp-input"
-                    value={range.mode}
-                    onChange={(event) => handleRangeChange({ mode: event.target.value as ScheduleRangeMode })}
-                  >
-                    <option value="single">Single day</option>
-                    <option value="week">7 consecutive days</option>
-                  </select>
+                    type="number"
+                    min={MIN_DAY_COUNT}
+                    max={MAX_DAY_COUNT}
+                    step={1}
+                    value={dayCountInput}
+                    onChange={(event) => handleDayCountInput(event.target.value)}
+                  />
                 </label>
 
                 <label className="cp-field">
@@ -237,6 +350,20 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
                     onChange={(event) => handleRangeChange({ startDate: event.target.value })}
                   />
                 </label>
+              </div>
+
+              <div className="cp-presets" role="group" aria-label="Day count presets">
+                {DAY_COUNT_PRESETS.map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    className={`cp-preset${range.dayCount === count ? ' is-active' : ''}`}
+                    aria-pressed={range.dayCount === count}
+                    onClick={() => handleRangeChange({ dayCount: count })}
+                  >
+                    {count} {count === 1 ? 'day' : 'days'}
+                  </button>
+                ))}
               </div>
 
               <div className="cp-field-row cp-field-row--split">
@@ -262,27 +389,32 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
               </div>
             </div>
 
-            <div className="cp-daytabs" role="group" aria-label="Choose a day to view">
-              {dayDates.map((date, index) => {
-                const dayWindow = dayWindows[index];
-                const label = dayWindow ? formatDayShort(dayWindow.windowStart) : date;
-                return (
-                  <button
-                    key={date}
-                    type="button"
-                    className={`cp-daytab${date === selectedDate ? ' is-active' : ''}`}
-                    aria-pressed={date === selectedDate}
-                    onClick={() => handleSelectDate(date)}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            <div className="cp-daynav" role="group" aria-label="Choose a day to view">
+              <button
+                type="button"
+                className="cp-preset"
+                onClick={() => handleSelectDate(dayDates[dayIndex - 1])}
+                disabled={!canGoPrevious}
+              >
+                Previous day
+              </button>
+              <p className="cp-daynav__label" aria-live="polite">
+                {dayDates.length > 0 ? `Day ${dayIndex + 1} of ${dayDates.length}` : 'No day selected'}
+              </p>
+              <button
+                type="button"
+                className="cp-preset"
+                onClick={() => handleSelectDate(dayDates[dayIndex + 1])}
+                disabled={!canGoNext}
+              >
+                Next day
+              </button>
             </div>
 
             <p className="cp-panel__foot">
-              Switching the viewed day does not re-run the planner. Changing the range or the task list does. Events
-              labelled “Example · ” are demo data, not real courses, and they say nothing about room availability.
+              Switching the viewed day does not re-run the planner. Changing the range, the task list or a repeating
+              series does. Events labelled “Example · ” are demo data, not real courses, and they say nothing about room
+              availability.
             </p>
           </section>
 
@@ -303,6 +435,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
         <div className="cp-column">
           <ScheduleResults
             request={request}
+            series={series}
             multi={multi}
             message={message ?? preview.error}
             onBuild={handleBuild}

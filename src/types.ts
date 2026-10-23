@@ -11,6 +11,11 @@ export interface StudyTask {
   title: string;
   durationMinutes: number;
   dueAt: string;
+  /** Earliest allowed instant, with explicit offset. Must precede dueAt. */
+  notBefore?: string;
+  /** Occurrence metadata; neither field implies a reservation. */
+  seriesId?: string;
+  occurrenceDate?: string;
   /** Display metadata only; does not affect scheduling order. */
   priority?: 'low' | 'medium' | 'high';
   courseCode?: string;
