@@ -118,8 +118,36 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     if (resolved.date) setSelectedDate(resolved.date);
   }
 
+  /**
+   * Single gate for everything that could plan. It validates the raw day-count
+   * text first, so Build, task/series edits and range edits all refuse an
+   * invalid value instead of planning a silently corrected range.
+   */
+  function planWith(
+    rawDays: string,
+    nextRange: ScheduleRange,
+    nextRequest: ScheduleRequest,
+    nextSeries: TaskSeries[],
+  ): MultiDayScheduleResponse | null {
+    const dayFailure = dayCountError(rawDays);
+    if (dayFailure) {
+      setMulti(null);
+      setMessage(dayFailure);
+      return null;
+    }
+    const resolved: ScheduleRange = { ...nextRange, dayCount: Number(rawDays) };
+    setRange(resolved);
+    const rangeFailure = rangeError(resolved);
+    if (rangeFailure) {
+      setMulti(null);
+      setMessage(rangeFailure);
+      return null;
+    }
+    return runSchedule(nextRequest, resolved, nextSeries);
+  }
+
   function handleBuild() {
-    const output = runSchedule(request, range, series);
+    const output = planWith(dayCountInput, range, request, series);
     if (!output) return;
     syncSelection(output, selectedId);
     if (output.days.length > 0 && !output.days.some((day) => day.date === selectedDate)) {
@@ -131,7 +159,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   function applyRequest(next: ScheduleRequest) {
     setRequest(next);
     if (!hasBuilt) return;
-    const output = runSchedule(next, range, series);
+    const output = planWith(dayCountInput, range, next, series);
     if (output) syncSelection(output, selectedId);
   }
 
@@ -139,7 +167,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   function applySeries(next: TaskSeries[]) {
     setSeries(next);
     if (!hasBuilt) return;
-    const output = runSchedule(request, range, next);
+    const output = planWith(dayCountInput, range, request, next);
     if (output) syncSelection(output, selectedId);
   }
 
@@ -165,24 +193,30 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   }
 
   function handleRangeChange(patch: Partial<ScheduleRange>) {
+    const rawDays = patch.dayCount !== undefined ? String(patch.dayCount) : dayCountInput;
     const next: ScheduleRange = { ...range, ...patch };
-    if (patch.dayCount !== undefined) next.dayCount = clampDayCount(patch.dayCount);
-    setDayCountInput(String(next.dayCount));
-    const invalid = rangeError(next);
     setRange(next);
     setSelectedDate(next.startDate);
     setSelectedId(null);
+    if (patch.dayCount !== undefined) setDayCountInput(String(patch.dayCount));
 
-    if (invalid) {
-      // An invalid range must never keep presenting the previous plan as current.
+    // A time or date edit must not clear a day-count error, restore a previous
+    // value, or plan with an older valid number.
+    const dayFailure = dayCountError(rawDays);
+    if (dayFailure) {
       setMulti(null);
-      setMessage(invalid);
+      setMessage(dayFailure);
       return;
     }
-
+    const resolved: ScheduleRange = { ...next, dayCount: Number(rawDays) };
+    const rangeFailure = rangeError(resolved);
+    if (rangeFailure) {
+      setMulti(null);
+      setMessage(rangeFailure);
+      return;
+    }
     setMessage(null);
-    // A plan the user already generated is recomputed; otherwise nothing is shown.
-    if (hasBuilt) runSchedule(request, next, series);
+    if (hasBuilt) runSchedule(request, resolved, series);
   }
 
   /** Rejects out-of-range or non-numeric day counts instead of clamping them. */

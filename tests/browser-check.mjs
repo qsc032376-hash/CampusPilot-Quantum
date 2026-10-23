@@ -844,6 +844,91 @@ async function main() {
     const dayRecovery = await dayState();
     record('correcting the day count recovers', dayRecovery.nav === 'Day 1 of 30' && dayRecovery.error === '' && dayRecovery.sessions > 0, JSON.stringify(dayRecovery));
 
+    // --- D QA round 2: an invalid day count blocks every planning path ---
+    await setDays('0');
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const buildBlocked = await dayState();
+    record(
+      'Build refuses an invalid day count',
+      buildBlocked.value === '0' && /1 to 30/.test(buildBlocked.error) && buildBlocked.sessions === 0,
+      JSON.stringify(buildBlocked),
+    );
+
+    await evaluate([
+      '(() => {',
+      "  const form = document.querySelector('#app form.cp-form');",
+      "  const input = form.querySelector('input:not([type])');",
+      "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+      "  setter.call(input, 'Blocked task');",
+      "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+      '  return "ok";',
+      '})()',
+    ].join('\n'));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const addBlocked = await dayState();
+    record(
+      'adding a one-off task keeps the invalid day count',
+      addBlocked.value === '0' && /1 to 30/.test(addBlocked.error) && addBlocked.sessions === 0,
+      JSON.stringify(addBlocked),
+    );
+
+    await evaluate([
+      '(() => {',
+      "  const section = document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"]');",
+      "  const form = section.querySelector('form.cp-form');",
+      "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+      "  const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;",
+      "  const title = form.querySelector('input:not([type])');",
+      "  setter.call(title, 'Blocked series');",
+      "  title.dispatchEvent(new Event('input', { bubbles: true }));",
+      "  const frequency = form.querySelector('select');",
+      "  setSelect.call(frequency, 'daily');",
+      "  frequency.dispatchEvent(new Event('change', { bubbles: true }));",
+      '  return "ok";',
+      '})()',
+    ].join('\n'));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const seriesBlocked = await dayState();
+    record(
+      'adding a series keeps the invalid day count',
+      seriesBlocked.value === '0' && /1 to 30/.test(seriesBlocked.error) && seriesBlocked.sessions === 0,
+      JSON.stringify(seriesBlocked),
+    );
+
+    await setEndTime('18:00');
+    const timeBlocked = await dayState();
+    record(
+      'a daily-hours edit keeps the invalid day count',
+      timeBlocked.value === '0' && /1 to 30/.test(timeBlocked.error) && timeBlocked.sessions === 0,
+      JSON.stringify(timeBlocked),
+    );
+    await setEndTime('17:00');
+
+    const rejectedForms = [];
+    for (const bad of ['31', '', '-1', '7.5', 'abc']) {
+      await setDays(bad);
+      const state = await dayState();
+      rejectedForms.push({ bad, error: state.error, sessions: state.sessions });
+    }
+    record(
+      'other invalid day counts are rejected',
+      rejectedForms.every((entry) => entry.error.length > 0 && entry.sessions === 0),
+      JSON.stringify(rejectedForms),
+    );
+
+    await setDays('30');
+    const dayRecovery2 = await dayState();
+    record(
+      'fixing the day count restores planning',
+      dayRecovery2.nav === 'Day 1 of 30' && dayRecovery2.error === '' && dayRecovery2.sessions > 0,
+      JSON.stringify(dayRecovery2),
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {
