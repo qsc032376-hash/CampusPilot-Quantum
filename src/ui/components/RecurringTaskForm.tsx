@@ -92,6 +92,11 @@ export function RecurringTaskForm({
       return;
     }
 
+    if (editingId && draft.frequency === 'never') {
+      setError('Choose Daily or Weekly when editing a repeating series.');
+      return;
+    }
+
     if (draft.frequency === 'never') {
       if (draft.startDate < rangeStart || draft.startDate > rangeEnd) {
         setError('Pick a start date inside the selected range for a single task.');
@@ -182,7 +187,9 @@ export function RecurringTaskForm({
               value={draft.frequency}
               onChange={(event) => patch({ frequency: event.target.value as SeriesDraft['frequency'] })}
             >
-              <option value="never">Never</option>
+              <option value="never" disabled={editingId !== null}>
+                Never
+              </option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
             </select>

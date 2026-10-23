@@ -184,6 +184,36 @@ check(
   conflictResultsHtml.includes('Math lecture') && conflictResultsHtml.includes('Advising slot'),
   '',
 );
+const seriesMulti = generateMultiDaySchedule({
+  windows: createDailyWindows({ startDate: '2026-10-19', dayCount: 1, startTime: '09:00', endTime: '17:00' }),
+  tasks: [],
+  taskSeries: [
+    { id: 'series-long', title: 'Long recurring', durationMinutes: 600, startDate: '2026-10-19', rule: { frequency: 'daily', interval: 1 } },
+  ],
+  classes: [],
+  unavailablePeriods: [],
+  locations: sampleRequest.locations,
+});
+const seriesResultsHtml = renderToStaticMarkup(
+  createElement(ScheduleResults, {
+    request: { ...sampleRequest, tasks: [] },
+    series: [
+      { id: 'series-long', title: 'Long recurring', durationMinutes: 600, startDate: '2026-10-19', rule: { frequency: 'daily', interval: 1 } },
+    ],
+    multi: seriesMulti,
+    message: null,
+    onBuild: () => {},
+    selectedDate: '2026-10-19',
+    selectedId: null,
+    onSelect: () => {},
+    onSelectDate: () => {},
+  }),
+);
+check(
+  'an unscheduled occurrence shows its own date',
+  seriesResultsHtml.includes('Long recurring') && seriesResultsHtml.includes('Oct 19, 2026'),
+  '',
+);
 check('results show the overlap duration', conflictResultsHtml.includes('30 min overlap'), '');
 
 const detailedRequest = {

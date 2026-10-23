@@ -64,6 +64,20 @@ export function clampDayCount(value: number): number {
   return Math.min(MAX_DAY_COUNT, Math.max(MIN_DAY_COUNT, Math.trunc(value)));
 }
 
+/**
+ * Validates the raw day-count text. Returns the message to show instead of
+ * silently clamping 0 or 31 into a different range.
+ */
+export function dayCountError(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return `Enter a whole number of days from ${MIN_DAY_COUNT} to ${MAX_DAY_COUNT}.`;
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value) || value < MIN_DAY_COUNT || value > MAX_DAY_COUNT) {
+    return `Enter a whole number of days from ${MIN_DAY_COUNT} to ${MAX_DAY_COUNT}.`;
+  }
+  return null;
+}
+
 /** Default demo range: seven days starting tomorrow in New York. */
 export function defaultScheduleRange(now: Date): ScheduleRange {
   return {

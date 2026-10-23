@@ -12,6 +12,7 @@ import {
   rangeDayCountLabel,
 } from '../src/ui/scheduleRange.ts';
 import { rangeError, resolveSelection } from '../src/ui/scheduleState.ts';
+import { dayCountError } from '../src/ui/scheduleRange.ts';
 import { draftToSeries, emptyDraft, occurrenceCount, seriesToDraft, validateDraft } from '../src/ui/recurring.ts';
 import type { SeriesDraft } from '../src/ui/recurring.ts';
 
@@ -200,4 +201,24 @@ test('occurrence counts follow the rule and the range dates', () => {
     'series-skip',
   );
   assert.equal(occurrenceCount(skippedWeek, dates), 1);
+});
+
+// --- raw day-count validation ----------------------------------------------
+
+test('the raw day count is rejected instead of silently clamped', () => {
+  for (const bad of ['0', '31', '', 'abc', '7.5', '-1', ' 0 ']) {
+    assert.match(dayCountError(bad) ?? '', /1 to 30/, 'expected a message for ' + JSON.stringify(bad));
+  }
+  for (const good of ['1', '7', '30', ' 7 ']) {
+    assert.equal(dayCountError(good), null, 'expected no message for ' + JSON.stringify(good));
+  }
+});
+
+test('thirty days across the fall-back transition resolve every window', () => {
+  const windows = buildDailyWindows({ dayCount: 30, startDate: '2026-10-25', startTime: '09:00', endTime: '17:00' });
+  assert.equal(windows.length, 30);
+  const oct31 = windows.find((window) => window.windowStart.startsWith('2026-10-31'));
+  const nov1 = windows.find((window) => window.windowStart.startsWith('2026-11-01'));
+  assert.equal(oct31?.windowStart, '2026-10-31T13:00:00.000Z');
+  assert.equal(nov1?.windowStart, '2026-11-01T14:00:00.000Z');
 });

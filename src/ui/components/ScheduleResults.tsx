@@ -70,6 +70,14 @@ export function ScheduleResults({
   const occurrenceIds = new Set((multi?.tasks ?? []).filter((task) => task.seriesId).map((task) => task.id));
   const placedOccurrences = (multi?.result.blocks ?? []).filter((block) => occurrenceIds.has(block.taskId)).length;
 
+  /** Occurrence day label, so an unscheduled occurrence is not just its series title. */
+  function occurrenceLabel(taskId: string): string | null {
+    const task = multi?.tasks.find((candidate) => candidate.id === taskId);
+    if (!task?.occurrenceDate) return null;
+    const day = multi?.days.find((candidate) => candidate.date === task.occurrenceDate);
+    return day ? formatDayShort(day.windowStart) : task.occurrenceDate;
+  }
+
   /** Tasks whose deadline is earlier than the whole range cannot be placed. */
   function beforeRange(taskId: string): boolean {
     const task =
@@ -224,7 +232,12 @@ export function ScheduleResults({
             <ul className="cp-unscheduled">
               {unscheduled.map((item) => (
                 <li key={item.taskId} className="cp-unscheduled__row">
-                  <strong>{titleOf(item.taskId)}</strong>
+                  <strong>
+                    {titleOf(item.taskId)}
+                    {occurrenceLabel(item.taskId) && (
+                      <span className="cp-tag">{occurrenceLabel(item.taskId)}</span>
+                    )}
+                  </strong>
                   <span>{item.reason}</span>
                   {beforeRange(item.taskId) && (
                     <span>

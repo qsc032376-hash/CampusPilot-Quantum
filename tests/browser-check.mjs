@@ -749,6 +749,101 @@ async function main() {
       JSON.stringify(afterReset),
     );
 
+
+    // --- D QA: duplicate reset keys, Never while editing, raw day count ---
+    for (let index = 0; index < 3; index += 1) {
+      await clickButton('Reset');
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    const afterResets = await evaluate(`(() => ({
+      forms: document.querySelectorAll('#app form.cp-form').length,
+      title: ((document.querySelector('#app form.cp-form input:not([type])') || {}).value) ?? null,
+    }))()`);
+    record(
+      'consecutive resets leave one clean one-off form',
+      afterResets.forms === 2 && afterResets.title === '',
+      JSON.stringify(afterResets),
+    );
+
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Edit guard');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      const frequency = form.querySelector('select');
+      setSelect.call(frequency, 'daily');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const edit = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Edit'));
+      if (!edit) return 'missing';
+      edit.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const neverState = await evaluate(`(() => {
+      const option = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"] select option[value="never"]');
+      return { exists: !!option, disabled: option ? option.disabled : null };
+    })()`);
+    record(
+      'Never cannot be chosen while editing a series',
+      neverState.exists && neverState.disabled === true,
+      JSON.stringify(neverState),
+    );
+    await evaluate("[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Cancel')).click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    record(
+      'cancelling the edit keeps exactly one series',
+      (await evaluate(
+        "document.querySelectorAll('#app section[aria-labelledby=\"cp-recurring-heading\"] .cp-series__row').length",
+      )) === 1,
+      '',
+    );
+
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    const setDays = async (value) => {
+      await evaluate([
+        '(() => {',
+        "  const input = document.querySelector('#app section[aria-labelledby=\"cp-range-heading\"] input[type=\"number\"]');",
+        '  if (!input) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        '  setter.call(input, ' + JSON.stringify(value) + ');',
+        "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const dayState = () =>
+      evaluate(`(() => ({
+        value: ((document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="number"]') || {}).value) ?? null,
+        error: ((document.querySelector('#app section[aria-labelledby="cp-results-heading"] .cp-error') || {}).textContent) || '',
+        sessions: document.querySelectorAll('#app .cp-session').length,
+        nav: ((document.querySelector('#app .cp-daynav__label') || {}).textContent) || '',
+      }))()`);
+
+    await setDays('0');
+    const zero = await dayState();
+    record('a day count of 0 is rejected, not clamped', zero.value === '0' && /1 to 30/.test(zero.error) && zero.sessions === 0, JSON.stringify(zero));
+
+    await setDays('31');
+    const high = await dayState();
+    record('a day count of 31 is rejected, not clamped', high.value === '31' && /1 to 30/.test(high.error) && high.sessions === 0, JSON.stringify(high));
+
+    await setDays('30');
+    const dayRecovery = await dayState();
+    record('correcting the day count recovers', dayRecovery.nav === 'Day 1 of 30' && dayRecovery.error === '' && dayRecovery.sessions > 0, JSON.stringify(dayRecovery));
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {

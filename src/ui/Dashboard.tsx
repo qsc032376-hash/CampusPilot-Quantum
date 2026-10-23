@@ -26,6 +26,7 @@ import {
   defaultScheduleRange,
   rangeDates,
   rangeDayCountLabel,
+  dayCountError,
 } from './scheduleRange.ts';
 import type { ScheduleRange } from './scheduleRange.ts';
 import { rangeError, resolveSelection } from './scheduleState.ts';
@@ -63,6 +64,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
   const [seriesFormKey, setSeriesFormKey] = useState(0);
+  /** Raw text of the day-count field, validated before it is applied. */
+  const [dayCountInput, setDayCountInput] = useState(() => String(initialRange.dayCount));
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -164,6 +167,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   function handleRangeChange(patch: Partial<ScheduleRange>) {
     const next: ScheduleRange = { ...range, ...patch };
     if (patch.dayCount !== undefined) next.dayCount = clampDayCount(patch.dayCount);
+    setDayCountInput(String(next.dayCount));
     const invalid = rangeError(next);
     setRange(next);
     setSelectedDate(next.startDate);
@@ -179,6 +183,20 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setMessage(null);
     // A plan the user already generated is recomputed; otherwise nothing is shown.
     if (hasBuilt) runSchedule(request, next, series);
+  }
+
+  /** Rejects out-of-range or non-numeric day counts instead of clamping them. */
+  function handleDayCountInput(value: string) {
+    setDayCountInput(value);
+    const invalid = dayCountError(value);
+    if (invalid) {
+      // Keep the raw value visible, report it, and never plan a corrected value.
+      setMessage(invalid);
+      setMulti(null);
+      setSelectedId(null);
+      return;
+    }
+    handleRangeChange({ dayCount: Number(value) });
   }
 
   /** Switching the viewed day never re-runs the planner. */
@@ -206,6 +224,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setSelectedId(next.selectedId);
     setFormKey(next.formKey);
     setRange(freshRange);
+    setDayCountInput(String(freshRange.dayCount));
     setSelectedDate(freshRange.startDate);
     setHasBuilt(false);
     setSeriesFormKey((current) => current + 1);
@@ -235,7 +254,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       <main className="cp-main">
         <div className="cp-column">
           <TaskForm
-            key={formKey}
+            key={`oneoff-${formKey}`}
             request={request}
             defaultDueIso={windowEnd}
             rangeStartIso={multi?.days[0]?.windowStart ?? preview.windows[0]?.windowStart ?? null}
@@ -243,7 +262,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             onRemove={handleRemoveTask}
           />
           <RecurringTaskForm
-            key={seriesFormKey}
+            key={`series-${seriesFormKey}`}
             series={series}
             dates={preview.dates}
             defaultStartDate={selectedDate}
@@ -283,8 +302,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
                     min={MIN_DAY_COUNT}
                     max={MAX_DAY_COUNT}
                     step={1}
-                    value={range.dayCount}
-                    onChange={(event) => handleRangeChange({ dayCount: Number(event.target.value) })}
+                    value={dayCountInput}
+                    onChange={(event) => handleDayCountInput(event.target.value)}
                   />
                 </label>
 

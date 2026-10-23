@@ -18,7 +18,7 @@ import { DEFAULT_DAY_COUNT, DEFAULT_END_TIME, DEFAULT_START_TIME, addCalendarDay
  * calendar arithmetic; no date literal is baked in.
  */
 
-export const RUNTIME_SAMPLE_PREFIX = 'Example 路 ';
+export const RUNTIME_SAMPLE_PREFIX = 'Example · ';
 
 /** Minutes after the day's window start, so every instant stays inside the window. */
 const CLASS_PLAN: readonly { day: number; startOffset: number; endOffset: number; title: string }[] = [
