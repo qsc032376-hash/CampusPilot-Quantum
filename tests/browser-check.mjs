@@ -1170,6 +1170,131 @@ async function main() {
     await send('Emulation.clearDeviceMetricsOverride', {});
     await new Promise((resolve) => setTimeout(resolve, 350));
 
+    // --- D QA: Reset must leave the task panel in one-time mode ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const form = section.querySelectorAll('form.cp-form')[1];
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Reset series');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      const frequency = form.querySelector('select');
+      setSelect.call(frequency, 'daily');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const edit = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Edit'));
+      if (!edit) return 'missing';
+      edit.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const form = section.querySelectorAll('form.cp-form')[1];
+      const title = form.querySelector('input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(title, 'Unsaved edit draft');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const beforeResetFromRepeating = await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const tabs = [...section.querySelectorAll('.cp-modetab')];
+      return {
+        repeatingPressed: tabs[1].getAttribute('aria-pressed'),
+        saving: [...section.querySelectorAll('button')].some((b) => b.textContent.includes('Save changes')),
+        seriesRows: section.querySelectorAll('.cp-series__row').length,
+        planSessions: document.querySelectorAll('#app .cp-session').length,
+        resetLabel: [...document.querySelectorAll('#app button')]
+          .map((b) => b.textContent.trim())
+          .find((text) => text.includes('Reset')) ?? null,
+      };
+    })()`);
+    record(
+      'the reset case starts in repeating mode with an open edit',
+      beforeResetFromRepeating.repeatingPressed === 'true' &&
+        beforeResetFromRepeating.saving === true &&
+        beforeResetFromRepeating.seriesRows === 1 &&
+        beforeResetFromRepeating.planSessions > 0,
+      JSON.stringify(beforeResetFromRepeating),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const afterResetFromRepeating = await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const tabs = [...section.querySelectorAll('.cp-modetab')];
+      const panes = [...section.querySelectorAll('.cp-task-pane')];
+      const forms = [...section.querySelectorAll('form.cp-form')];
+      return {
+        pressed: tabs.map((tab) => tab.getAttribute('aria-pressed')),
+        visible: panes.map((pane) => !pane.hasAttribute('hidden')),
+        seriesRows: section.querySelectorAll('.cp-series__row').length,
+        saving: [...section.querySelectorAll('button')].some((b) => b.textContent.includes('Save changes')),
+        oneOffTitle: (forms[0].querySelector('input:not([type])') || {}).value ?? null,
+        recurringTitle: (forms[1].querySelector('input:not([type])') || {}).value ?? null,
+        plan: !!document.querySelector('#app .cp-results'),
+        selectedSessions: document.querySelectorAll('#app .cp-session.is-selected').length,
+        locationCard: !!document.querySelector('#app .cp-location__task'),
+        selectedDays: document.querySelectorAll('#app .cp-days__head.is-selected').length,
+      };
+    })()`);
+    record(
+      'reset from repeating mode returns to one-time mode',
+      afterResetFromRepeating.pressed[0] === 'true' && afterResetFromRepeating.pressed[1] === 'false',
+      JSON.stringify(afterResetFromRepeating.pressed),
+    );
+    record(
+      'reset shows the one-time form and hides the repeating form',
+      afterResetFromRepeating.visible[0] === true && afterResetFromRepeating.visible[1] === false,
+      JSON.stringify(afterResetFromRepeating.visible),
+    );
+    record(
+      'reset clears the series, the edit draft, the plan and the selection',
+      afterResetFromRepeating.seriesRows === 0 &&
+        afterResetFromRepeating.saving === false &&
+        afterResetFromRepeating.oneOffTitle === '' &&
+        afterResetFromRepeating.recurringTitle === '' &&
+        afterResetFromRepeating.plan === false &&
+        afterResetFromRepeating.selectedSessions === 0 &&
+        afterResetFromRepeating.locationCard === false,
+      JSON.stringify(afterResetFromRepeating),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const secondReset = await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const tabs = [...section.querySelectorAll('.cp-modetab')];
+      const panes = [...section.querySelectorAll('.cp-task-pane')];
+      return {
+        pressed: tabs.map((tab) => tab.getAttribute('aria-pressed')),
+        visible: panes.map((pane) => !pane.hasAttribute('hidden')),
+      };
+    })()`);
+    record(
+      'a second reset keeps one-time mode',
+      secondReset.pressed[0] === 'true' && secondReset.visible[0] === true && secondReset.visible[1] === false,
+      JSON.stringify(secondReset),
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {

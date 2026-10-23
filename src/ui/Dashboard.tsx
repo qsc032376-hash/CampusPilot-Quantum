@@ -265,6 +265,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setDayCountInput(String(freshRange.dayCount));
     setSelectedDate(freshRange.startDate);
     setHasBuilt(false);
+    // Reset also returns to the default one-time task mode.
+    setTaskMode('oneoff');
     setSeriesFormKey((current) => current + 1);
   }
 
