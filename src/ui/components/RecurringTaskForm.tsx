@@ -7,6 +7,7 @@ import {
   MAX_SERIES_TITLE,
   describeRule,
   draftToSeries,
+  hasSeries,
   emptyDraft,
   occurrenceCount,
   seriesToDraft,
@@ -86,6 +87,16 @@ export function RecurringTaskForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    // The series being edited can disappear from the list; never silently drop
+    // the user's draft or pretend an update happened.
+    if (editingId && !hasSeries(series, editingId)) {
+      setEditingId(null);
+      setError(
+        'That repeating series no longer exists, so your draft was kept. Review it and add it as a new series.',
+      );
+      return;
+    }
     const message = validateDraft(draft);
     if (message) {
       setError(message);
@@ -123,6 +134,12 @@ export function RecurringTaskForm({
     if (editingId) onUpdateSeries(built);
     else onAddSeries(built);
     resetDraft();
+  }
+
+  /** Deleting the series being edited leaves a clean add form. */
+  function handleDelete(id: string) {
+    onDeleteSeries(id);
+    if (id === editingId) resetDraft();
   }
 
   function startEdit(item: TaskSeries) {
@@ -340,7 +357,7 @@ export function RecurringTaskForm({
                   <button
                     type="button"
                     className="cp-link"
-                    onClick={() => onDeleteSeries(item.id)}
+                    onClick={() => handleDelete(item.id)}
                     aria-label={`Delete ${item.title}`}
                   >
                     Delete

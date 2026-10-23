@@ -13,7 +13,7 @@ import {
 } from '../src/ui/scheduleRange.ts';
 import { rangeError, resolveSelection } from '../src/ui/scheduleState.ts';
 import { dayCountError } from '../src/ui/scheduleRange.ts';
-import { draftToSeries, emptyDraft, occurrenceCount, seriesToDraft, validateDraft } from '../src/ui/recurring.ts';
+import { draftToSeries, emptyDraft, hasSeries, occurrenceCount, seriesToDraft, validateDraft } from '../src/ui/recurring.ts';
 import type { SeriesDraft } from '../src/ui/recurring.ts';
 
 test('campus dates come from New York, not the host time zone', () => {
@@ -221,4 +221,13 @@ test('thirty days across the fall-back transition resolve every window', () => {
   const nov1 = windows.find((window) => window.windowStart.startsWith('2026-11-01'));
   assert.equal(oct31?.windowStart, '2026-10-31T13:00:00.000Z');
   assert.equal(nov1?.windowStart, '2026-11-01T14:00:00.000Z');
+});
+
+test('an edited series is only updatable while it still exists', () => {
+  const series = draftToSeries(emptyDraft('2026-10-19'), 'series-live');
+  const list = [series];
+  assert.equal(hasSeries(list, 'series-live'), true);
+  assert.equal(hasSeries(list, 'series-gone'), false);
+  assert.equal(hasSeries([], 'series-live'), false);
+  assert.equal(hasSeries(list, null), false);
 });

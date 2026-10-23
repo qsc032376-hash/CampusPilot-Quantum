@@ -929,6 +929,100 @@ async function main() {
       JSON.stringify(dayRecovery2),
     );
 
+    // --- A review: deleting the edited series ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate([
+      '(() => {',
+      "  const section = document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"]');",
+      "  const form = section.querySelector('form.cp-form');",
+      "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+      "  const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;",
+      "  const title = form.querySelector('input:not([type])');",
+      "  setter.call(title, 'Edit target');",
+      "  title.dispatchEvent(new Event('input', { bubbles: true }));",
+      "  const frequency = form.querySelector('select');",
+      "  setSelect.call(frequency, 'daily');",
+      "  frequency.dispatchEvent(new Event('change', { bubbles: true }));",
+      '  return "ok";',
+      '})()',
+    ].join('\n'));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const edit = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Edit'));
+      if (!edit) return 'missing';
+      edit.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    record(
+      'editing a series shows the save action',
+      await evaluate(`[...document.querySelectorAll('#app section[aria-labelledby="cp-recurring-heading"] button')].some((b) => b.textContent.includes('Save changes'))`),
+      '',
+    );
+
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const remove = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Delete'));
+      if (!remove) return 'missing';
+      remove.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const afterDeleteWhileEditing = await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const buttons = [...section.querySelectorAll('button')].map((b) => b.textContent);
+      const form = section.querySelector('form.cp-form');
+      return {
+        save: buttons.some((text) => text.includes('Save changes')),
+        add: buttons.some((text) => text.includes('Add repeating task')),
+        title: (form.querySelector('input:not([type])') || {}).value,
+        rows: section.querySelectorAll('.cp-series__row').length,
+      };
+    })()`);
+    record(
+      'deleting the edited series leaves a clean add form',
+      afterDeleteWhileEditing.save === false &&
+        afterDeleteWhileEditing.add === true &&
+        afterDeleteWhileEditing.title === '' &&
+        afterDeleteWhileEditing.rows === 0,
+      JSON.stringify(afterDeleteWhileEditing),
+    );
+
+    await evaluate([
+      '(() => {',
+      "  const section = document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"]');",
+      "  const form = section.querySelector('form.cp-form');",
+      "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+      "  const title = form.querySelector('input:not([type])');",
+      "  setter.call(title, 'Fresh series');",
+      "  title.dispatchEvent(new Event('input', { bubbles: true }));",
+      "  const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;",
+      "  const frequency = form.querySelector('select');",
+      "  setSelect.call(frequency, 'daily');",
+      "  frequency.dispatchEvent(new Event('change', { bubbles: true }));",
+      '  return "ok";',
+      '})()',
+    ].join('\n'));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const freshState = await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      return {
+        rows: [...section.querySelectorAll('.cp-series__row')].map((el) => el.textContent),
+        save: [...section.querySelectorAll('button')].some((b) => b.textContent.includes('Save changes')),
+      };
+    })()`);
+    record(
+      'the reset form adds a new series instead of saving silently',
+      freshState.rows.length === 1 && freshState.rows[0].includes('Fresh series') && freshState.save === false,
+      JSON.stringify(freshState).slice(0, 200),
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {

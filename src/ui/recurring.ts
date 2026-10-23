@@ -130,6 +130,11 @@ export function seriesToDraft(series: TaskSeries): SeriesDraft {
   };
 }
 
+/** True when the series being edited still exists in the current list. */
+export function hasSeries(series: readonly TaskSeries[], id: string | null): boolean {
+  return id !== null && series.some((item) => item.id === id);
+}
+
 /** How many occurrences a series produces inside the supplied calendar dates. */
 export function occurrenceCount(series: TaskSeries, dates: readonly string[]): number {
   try {
