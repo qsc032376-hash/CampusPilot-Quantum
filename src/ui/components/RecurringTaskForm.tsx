@@ -162,11 +162,11 @@ export function RecurringTaskForm({
   const unit = draft.frequency === 'daily' ? 'day' : 'week';
 
   return (
-    <section className="cp-panel" aria-labelledby="cp-recurring-heading">
-      <div className="cp-panel__head">
-        <h2 id="cp-recurring-heading">Repeating task</h2>
-        <p className="cp-panel__meta">Personal study plan · never a course or room booking</p>
-      </div>
+    <section className="cp-task-block" aria-labelledby="cp-recurring-heading">
+      <h3 id="cp-recurring-heading" className="cp-subhead">
+        Repeating task
+      </h3>
+      <p className="cp-hint">Personal study plan · never a course or room booking</p>
 
       <form className="cp-form" onSubmit={handleSubmit} noValidate>
         <label className="cp-field" htmlFor={`${fieldId}-title`}>

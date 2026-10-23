@@ -7,6 +7,8 @@ import { AppHeader } from './components/AppHeader.tsx';
 import { TaskForm } from './components/TaskForm.tsx';
 import type { TaskDraft } from './components/TaskForm.tsx';
 import { RecurringTaskForm } from './components/RecurringTaskForm.tsx';
+import { TaskModeSwitch } from './components/TaskModeSwitch.tsx';
+import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
@@ -66,6 +68,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [seriesFormKey, setSeriesFormKey] = useState(0);
   /** Raw text of the day-count field, validated before it is applied. */
   const [dayCountInput, setDayCountInput] = useState(() => String(initialRange.dayCount));
+  /** Which task form is visible; switching never touches tasks, series or the plan. */
+  const [taskMode, setTaskMode] = useState<TaskMode>('oneoff');
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -287,32 +291,47 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
       <main className="cp-main">
         <div className="cp-column">
-          <TaskForm
-            key={`oneoff-${formKey}`}
-            request={request}
-            defaultDueIso={windowEnd}
-            rangeStartIso={multi?.days[0]?.windowStart ?? preview.windows[0]?.windowStart ?? null}
-            onAdd={handleAddTask}
-            onRemove={handleRemoveTask}
-          />
-          <RecurringTaskForm
-            key={`series-${seriesFormKey}`}
-            series={series}
-            dates={preview.dates}
-            defaultStartDate={selectedDate}
-            rangeStart={range.startDate}
-            rangeEnd={preview.dates[preview.dates.length - 1] ?? range.startDate}
-            dueAtFor={(date) => {
-              const index = preview.dates.indexOf(date);
-              return index >= 0 ? preview.windows[index].windowEnd : null;
-            }}
-            onAddSeries={handleAddSeries}
-            onUpdateSeries={handleUpdateSeries}
-            onDeleteSeries={handleDeleteSeries}
-            onAddOneOff={(task: OneOffFromSeries) =>
-              applyRequest({ ...request, tasks: [...request.tasks, { id: makeTaskId(), ...task }] })
-            }
-          />
+          <section className="cp-panel" aria-labelledby="cp-task-heading">
+            <div className="cp-panel__head">
+              <h2 id="cp-task-heading">Add a study task</h2>
+              <p className="cp-panel__meta">One-time or repeating · all times {CAMPUS_TIME_ZONE}</p>
+            </div>
+
+            <TaskModeSwitch mode={taskMode} onChange={setTaskMode} seriesCount={series.length} />
+
+            {/* Both panes stay mounted: a draft or an open series edit survives a switch. */}
+            <div className="cp-task-pane" hidden={taskMode !== 'oneoff'}>
+              <TaskForm
+                key={`oneoff-${formKey}`}
+                request={request}
+                defaultDueIso={windowEnd}
+                rangeStartIso={multi?.days[0]?.windowStart ?? preview.windows[0]?.windowStart ?? null}
+                onAdd={handleAddTask}
+                onRemove={handleRemoveTask}
+              />
+            </div>
+
+            <div className="cp-task-pane" hidden={taskMode !== 'recurring'}>
+              <RecurringTaskForm
+                key={`series-${seriesFormKey}`}
+                series={series}
+                dates={preview.dates}
+                defaultStartDate={selectedDate}
+                rangeStart={range.startDate}
+                rangeEnd={preview.dates[preview.dates.length - 1] ?? range.startDate}
+                dueAtFor={(date) => {
+                  const index = preview.dates.indexOf(date);
+                  return index >= 0 ? preview.windows[index].windowEnd : null;
+                }}
+                onAddSeries={handleAddSeries}
+                onUpdateSeries={handleUpdateSeries}
+                onDeleteSeries={handleDeleteSeries}
+                onAddOneOff={(task: OneOffFromSeries) =>
+                  applyRequest({ ...request, tasks: [...request.tasks, { id: makeTaskId(), ...task }] })
+                }
+              />
+            </div>
+          </section>
           <LocationCard block={selectedBlock} request={request} />
           <RecommendedLocations block={selectedBlock} request={request} />
         </div>

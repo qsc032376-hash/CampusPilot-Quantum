@@ -76,11 +76,11 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
   }
 
   return (
-    <section className="cp-panel" aria-labelledby={`${fieldId}-heading`}>
-      <div className="cp-panel__head">
-        <h2 id={`${fieldId}-heading`}>Add a study task</h2>
-        <p className="cp-panel__meta">All times are {CAMPUS_TIME_ZONE}.</p>
-      </div>
+    <section className="cp-task-block" aria-labelledby={`${fieldId}-heading`}>
+      <h3 id={`${fieldId}-heading`} className="cp-subhead">
+        One-time task
+      </h3>
+      <p className="cp-hint">All times are {CAMPUS_TIME_ZONE}. Each task keeps its own deadline.</p>
 
       <form className="cp-form" onSubmit={handleSubmit} noValidate>
         <label className="cp-field">

@@ -1023,6 +1023,153 @@ async function main() {
       JSON.stringify(freshState).slice(0, 200),
     );
 
+    // --- task mode switch ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    const taskPanel = '#app section[aria-labelledby="cp-task-heading"]';
+    const modeState = () =>
+      evaluate(`(() => {
+        const section = document.querySelector('${taskPanel}');
+        const tabs = [...section.querySelectorAll('.cp-modetab')];
+        const panes = [...section.querySelectorAll('.cp-task-pane')];
+        return {
+          labels: tabs.map((tab) => tab.textContent),
+          pressed: tabs.map((tab) => tab.getAttribute('aria-pressed')),
+          visible: panes.map((pane) => !pane.hasAttribute('hidden')),
+          forms: section.querySelectorAll('form.cp-form').length,
+          title: (section.querySelector('.cp-task-pane input:not([type])') || {}).value ?? null,
+        };
+      })()`);
+
+    const initialMode = await modeState();
+    record(
+      'one-time task is the default mode',
+      initialMode.pressed[0] === 'true' &&
+        initialMode.pressed[1] === 'false' &&
+        initialMode.visible[0] === true &&
+        initialMode.visible[1] === false &&
+        initialMode.forms === 2,
+      JSON.stringify(initialMode),
+    );
+
+    await evaluate(`(() => {
+      const input = document.querySelector('${taskPanel} .cp-task-pane input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Draft task');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const afterSwitch = await modeState();
+    record(
+      'switching shows the repeating pane',
+      afterSwitch.visible[0] === false && afterSwitch.visible[1] === true,
+      JSON.stringify(afterSwitch),
+    );
+    record(
+      'an unsubmitted one-time draft survives a mode switch',
+      afterSwitch.title === 'Draft task',
+      String(afterSwitch.title),
+    );
+
+    await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const form = section.querySelectorAll('form.cp-form')[1];
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Mode series');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      const frequency = form.querySelector('select');
+      setSelect.call(frequency, 'daily');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const edit = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Edit'));
+      if (!edit) return 'missing';
+      edit.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    record(
+      'an open series edit survives a mode switch',
+      await evaluate(
+        `[...document.querySelectorAll('${taskPanel} button')].some((b) => b.textContent.includes('Save changes'))`,
+      ),
+      '',
+    );
+    record(
+      'the repeating tab shows the saved series count',
+      await evaluate(
+        `[...document.querySelectorAll('${taskPanel} .cp-modetab')].some((tab) => /Repeating task\s*1/.test(tab.textContent))`,
+      ),
+      '',
+    );
+
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const hiddenSeries = await evaluate(`(() => ({
+      counts: ((document.querySelector('#app .cp-results .cp-hint') || {}).textContent) || '',
+      repeating: document.querySelectorAll('#app .cp-session .cp-tag').length,
+    }))()`);
+    record(
+      'a hidden series still participates in the schedule',
+      /Repeating series: 1/.test(hiddenSeries.counts) && hiddenSeries.repeating > 0,
+      JSON.stringify(hiddenSeries),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const afterModeReset = await modeState();
+    const resetSeriesCount = await evaluate(`document.querySelectorAll('${taskPanel} .cp-series__row').length`);
+    record(
+      'reset returns to one-time mode and clears the series',
+      afterModeReset.pressed[0] === 'true' && afterModeReset.forms === 2 && afterModeReset.title === '' && resetSeriesCount === 0,
+      JSON.stringify(afterModeReset) + ' series=' + String(resetSeriesCount),
+    );
+
+    // A narrow viewport must not make the switch overflow the panel.
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 380,
+      height: 820,
+      deviceScaleFactor: 1,
+      mobile: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const narrowMode = await evaluate(`(() => {
+      const section = document.querySelector('${taskPanel}');
+      const tabs = section.querySelector('.cp-modetabs');
+      const buttons = [...tabs.querySelectorAll('.cp-modetab')];
+      const box = tabs.getBoundingClientRect();
+      return {
+        buttons: buttons.length,
+        allVisible: buttons.every((button) => button.getBoundingClientRect().width > 0),
+        overflow: tabs.scrollWidth - tabs.clientWidth,
+        insideViewport: box.width > 0 && box.right <= document.documentElement.clientWidth + 1,
+      };
+    })()`);
+    record(
+      'the mode switch fits a narrow viewport',
+      narrowMode.buttons === 2 && narrowMode.allVisible && narrowMode.overflow <= 1 && narrowMode.insideViewport,
+      JSON.stringify(narrowMode),
+    );
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {
