@@ -169,6 +169,7 @@ check('conflict count is announced to the user', conflictScheduleHtml.includes('
 const conflictResultsHtml = renderToStaticMarkup(
   createElement(ScheduleResults, {
     request: sampleRequest,
+    series: [],
     multi: sampleMulti,
     message: null,
     onBuild: () => {},

@@ -1,8 +1,8 @@
-import type { ScheduleRequest } from '../types.ts';
+﻿import type { ScheduleRequest } from '../types.ts';
 import { createDailyWindows } from '../features/multi-day-schedule/index.ts';
 import { CAMPUS_LOCATIONS } from '../features/campus-locations/index.ts';
 import { toScheduleLocations } from '../features/campus-locations/index.ts';
-import { DAY_COUNT_BY_MODE, DEFAULT_END_TIME, DEFAULT_START_TIME, addCalendarDays, campusToday } from './scheduleRange.ts';
+import { DEFAULT_DAY_COUNT, DEFAULT_END_TIME, DEFAULT_START_TIME, addCalendarDays, campusToday } from './scheduleRange.ts';
 
 /**
  * Runtime demo data.
@@ -10,7 +10,7 @@ import { DAY_COUNT_BY_MODE, DEFAULT_END_TIME, DEFAULT_START_TIME, addCalendarDay
  * The fixed fixture in `src/sample.ts` stays untouched for deterministic tests.
  * This factory builds a *labelled example* request for the running app so the
  * default seven-day range always contains something, whatever today happens to
- * be. Every title starts with "Example · " and the UI states that these are
+ * be. Every title starts with "Example 路 " and the UI states that these are
  * sample events: they are not real courses and they say nothing about room
  * availability.
  *
@@ -18,7 +18,7 @@ import { DAY_COUNT_BY_MODE, DEFAULT_END_TIME, DEFAULT_START_TIME, addCalendarDay
  * calendar arithmetic; no date literal is baked in.
  */
 
-export const RUNTIME_SAMPLE_PREFIX = 'Example · ';
+export const RUNTIME_SAMPLE_PREFIX = 'Example 路 ';
 
 /** Minutes after the day's window start, so every instant stays inside the window. */
 const CLASS_PLAN: readonly { day: number; startOffset: number; endOffset: number; title: string }[] = [
@@ -49,7 +49,7 @@ export interface RuntimeSampleOptions {
 /** Builds the labelled example request for the default seven-day range. */
 export function createRuntimeSampleRequest(now: Date, options: RuntimeSampleOptions = {}): ScheduleRequest {
   const startDate = addCalendarDays(campusToday(now), 1);
-  const dayCount = DAY_COUNT_BY_MODE.week;
+  const dayCount = DEFAULT_DAY_COUNT;
   const windows = createDailyWindows({
     startDate,
     dayCount,

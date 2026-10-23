@@ -558,43 +558,61 @@ async function main() {
       return 'ok';
     })()`);
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const dayBefore = await evaluate("(document.querySelector('#app .cp-daytab.is-active') || {}).textContent || ''");
+    const dayBefore = await evaluate("(document.querySelector('#app .cp-daynav__label') || {}).textContent || ''");
 
-    // Two earlier-deadline blocks fill the day, so the selected block has to move.
-    const addFiller = async (title) => {
-      await evaluate([
-        '(() => {',
-        "  const form = document.querySelector('#app form.cp-form');",
-        '  if (!form) return "missing";',
-        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
-        "  const titleInput = form.querySelector('input:not([type])');",
-        '  setter.call(titleInput, ' + JSON.stringify(title) + ');',
-        "  titleInput.dispatchEvent(new Event('input', { bubbles: true }));",
-        "  const minutes = form.querySelector('input[type=\"number\"]');",
-        "  setter.call(minutes, '240');",
-        "  minutes.dispatchEvent(new Event('input', { bubbles: true }));",
-        "  const due = form.querySelector('input[type=\"datetime-local\"]');",
-        "  setter.call(due, '2026-10-20T17:00');",
-        "  due.dispatchEvent(new Event('input', { bubbles: true }));",
-        '  return "ok";',
-        '})()',
-      ].join('\n'));
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      await clickButton('Add task');
-      await new Promise((resolve) => setTimeout(resolve, 450));
-    };
-    await addFiller('Filler A');
-    await addFiller('Filler B');
+    // A weekly series whose occurrence fills the viewed day pushes the block on.
+    await evaluate([
+      '(() => {',
+      "  const section = document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"]');",
+      '  const form = section.querySelector("form.cp-form");',
+      "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+      "  const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;",
+      "  const titleInput = form.querySelector('input:not([type])');",
+      "  setter.call(titleInput, 'Weekly filler');",
+      "  titleInput.dispatchEvent(new Event('input', { bubbles: true }));",
+      "  const minutes = form.querySelector('input[type=\"number\"]');",
+      "  setter.call(minutes, '480');",
+      "  minutes.dispatchEvent(new Event('input', { bubbles: true }));",
+      "  const frequency = form.querySelector('select');",
+      "  setSelect.call(frequency, 'weekly');",
+      "  frequency.dispatchEvent(new Event('change', { bubbles: true }));",
+      '  return "ok";',
+      '})()',
+    ].join('\n'));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const boxes = [...section.querySelectorAll('input[type="checkbox"]')];
+      const tuesday = boxes[1];
+      if (!tuesday) return 'missing';
+      tuesday.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const seriesState = await evaluate(`(() => ({
+      rows: [...document.querySelectorAll('#app section[aria-labelledby="cp-recurring-heading"] .cp-series__row')].map((el) => el.textContent),
+      counts: document.querySelector('#app .cp-results .cp-hint') ? document.querySelector('#app .cp-results .cp-hint').textContent : '',
+    }))()`);
+    record('a repeating series can be created', seriesState.rows.length === 1, JSON.stringify(seriesState).slice(0, 240));
+    record(
+      'counts separate series from occurrences',
+      /Repeating series: 1/.test(seriesState.counts) && /Placed occurrences: \d+/.test(seriesState.counts),
+      seriesState.counts,
+    );
 
     const afterReplan = await evaluate(`(() => {
-      const tabs = [...document.querySelectorAll('#app .cp-daytab')];
       const rows = [...document.querySelectorAll('#app .cp-days__row')];
       const selectedSession = document.querySelector('#app .cp-session.is-selected');
       const row = selectedSession ? selectedSession.closest('.cp-days__row') : null;
+      const navText = (document.querySelector('#app .cp-daynav__label') || {}).textContent || '';
+      const shown = /Day (\\d+) of/.exec(navText);
       return {
-        tabIndex: tabs.findIndex((tab) => tab.classList.contains('is-active')),
+        tabIndex: shown ? Number(shown[1]) - 1 : -1,
         rowIndex: row ? rows.indexOf(row) : -1,
-        tab: tabs.find((tab) => tab.classList.contains('is-active'))?.textContent ?? null,
+        tab: navText,
         row: row ? row.querySelector('.cp-days__label').textContent : null,
         session: selectedSession ? selectedSession.textContent : null,
         slot: !!document.querySelector('#app .cp-slot.is-selected'),
@@ -647,6 +665,89 @@ async function main() {
     }))()`);
     record('restoring valid hours clears the stale error', recovered.error === '', recovered.error);
     record('restoring valid hours recomputes the existing plan', recovered.sessions > 0, String(recovered.sessions));
+
+    // --- range presets, day navigation, series edit/delete, reset ---
+    await clickButton('30 days');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const preset30 = await evaluate(`(() => ({
+      nav: (document.querySelector('#app .cp-daynav__label') || {}).textContent || '',
+      weeks: document.querySelectorAll('#app .cp-week').length,
+      days: document.querySelectorAll('#app .cp-days__row').length,
+    }))()`);
+    record('the 30-day preset shows thirty days', preset30.nav === 'Day 1 of 30' && preset30.days === 30, JSON.stringify(preset30));
+    record('thirty days are grouped into weeks', preset30.weeks === 5, String(preset30.weeks));
+
+    await evaluate("[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Next day')).click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const nextDayNav = await evaluate("(document.querySelector('#app .cp-daynav__label') || {}).textContent || ''");
+    record('the next-day control moves the viewed day', nextDayNav === 'Day 2 of 30', nextDayNav);
+
+    await clickButton('7 days');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    const recurringSection = '#app section[aria-labelledby="cp-recurring-heading"]';
+    await evaluate(`(() => {
+      const section = document.querySelector('${recurringSection}');
+      const edit = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Edit'));
+      if (!edit) return 'missing';
+      edit.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    record(
+      'a series can be opened for editing',
+      await evaluate(
+        `[...document.querySelectorAll('${recurringSection} button')].some((b) => b.textContent.includes('Save changes'))`,
+      ),
+      '',
+    );
+
+    await evaluate(`(() => {
+      const section = document.querySelector('${recurringSection}');
+      const input = section.querySelector('form.cp-form input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Weekly filler edited');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Save changes');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const editedRows = await evaluate(
+      `[...document.querySelectorAll('${recurringSection} .cp-series__row')].map((el) => el.textContent)`,
+    );
+    record(
+      'editing keeps one series with the new title',
+      editedRows.length === 1 && editedRows[0].includes('Weekly filler edited'),
+      JSON.stringify(editedRows).slice(0, 160),
+    );
+
+    await evaluate(`(() => {
+      const section = document.querySelector('${recurringSection}');
+      const remove = [...section.querySelectorAll('button')].find((b) => b.textContent.includes('Delete'));
+      if (!remove) return 'missing';
+      remove.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    record(
+      'deleting the series removes it',
+      (await evaluate(`document.querySelectorAll('${recurringSection} .cp-series__row').length`)) === 0,
+      '',
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const afterReset = await evaluate(`(() => ({
+      nav: (document.querySelector('#app .cp-daynav__label') || {}).textContent || '',
+      series: document.querySelectorAll('${recurringSection} .cp-series__row').length,
+      results: !!document.querySelector('#app .cp-results'),
+    }))()`);
+    record(
+      'reset clears series and restores the default seven-day range',
+      afterReset.nav === 'Day 1 of 7' && afterReset.series === 0 && afterReset.results === false,
+      JSON.stringify(afterReset),
+    );
 
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");

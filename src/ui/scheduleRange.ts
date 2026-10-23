@@ -5,16 +5,15 @@ import { CAMPUS_TIME_ZONE } from './format.ts';
 /**
  * Schedule range helpers.
  *
- * All campus dates are derived through Intl with an explicit America/New_York
- * time zone and resolved into instants by A's `createDailyWindows`. Nothing here
+ * All campus dates come from Intl with an explicit America/New_York time zone and
+ * are resolved into instants by A's `createDailyWindows`. Nothing here
  * re-implements time-zone or DST conversion: `addCalendarDays` only moves a
- * YYYY-MM-DD calendar label forward, using UTC purely as a date container.
+ * YYYY-MM-DD calendar label, using UTC purely as a date container.
  */
 
-export type ScheduleRangeMode = 'single' | 'week';
-
 export interface ScheduleRange {
-  mode: ScheduleRangeMode;
+  /** Consecutive New York calendar days, 1 through 30. */
+  dayCount: number;
   /** New York calendar date, YYYY-MM-DD. */
   startDate: string;
   /** HH:mm, campus local clock. */
@@ -22,7 +21,10 @@ export interface ScheduleRange {
   endTime: string;
 }
 
-export const DAY_COUNT_BY_MODE: Record<ScheduleRangeMode, number> = { single: 1, week: 7 };
+export const MIN_DAY_COUNT = 1;
+export const MAX_DAY_COUNT = 30;
+export const DEFAULT_DAY_COUNT = 7;
+export const DAY_COUNT_PRESETS: readonly number[] = [1, 7, 14, 30];
 export const DEFAULT_START_TIME = '09:00';
 export const DEFAULT_END_TIME = '17:00';
 
@@ -56,35 +58,38 @@ export function addCalendarDays(date: string, days: number): string {
   return new Date(base + days * 86_400_000).toISOString().slice(0, 10);
 }
 
+/** Clamps a requested day count into the supported 1-30 range. */
+export function clampDayCount(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_DAY_COUNT;
+  return Math.min(MAX_DAY_COUNT, Math.max(MIN_DAY_COUNT, Math.trunc(value)));
+}
+
 /** Default demo range: seven days starting tomorrow in New York. */
 export function defaultScheduleRange(now: Date): ScheduleRange {
   return {
-    mode: 'week',
+    dayCount: DEFAULT_DAY_COUNT,
     startDate: addCalendarDays(campusToday(now), 1),
     startTime: DEFAULT_START_TIME,
     endTime: DEFAULT_END_TIME,
   };
 }
 
-export function dayCountFor(mode: ScheduleRangeMode): number {
-  return DAY_COUNT_BY_MODE[mode];
-}
-
 /** Candidate dates in the range, derived from the range start. */
 export function rangeDates(range: ScheduleRange): string[] {
-  const count = dayCountFor(range.mode);
+  const count = clampDayCount(range.dayCount);
   return Array.from({ length: count }, (_, index) => addCalendarDays(range.startDate, index));
 }
 
 export function buildDailyWindows(range: ScheduleRange): DailyWindow[] {
   return createDailyWindows({
     startDate: range.startDate,
-    dayCount: dayCountFor(range.mode),
+    dayCount: clampDayCount(range.dayCount),
     startTime: range.startTime,
     endTime: range.endTime,
   });
 }
 
 export function rangeDayCountLabel(range: ScheduleRange): string {
-  return range.mode === 'single' ? '1 day' : '7 days';
+  const count = clampDayCount(range.dayCount);
+  return `${count} ${count === 1 ? 'day' : 'days'}`;
 }

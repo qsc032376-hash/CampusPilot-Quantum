@@ -27,6 +27,6 @@ test('the range summary interpolates both times with a real en dash', () => {
 test('the example note stays readable and marks the data as demo', () => {
   const text = strictDecode(source);
   assert.match(text, /labelled “Example · ” are demo data, not real courses/);
-  assert.match(text, /room availability/);
-  assert.match(text, /Personal study planning only/);
+  assert.match(text, /room\s+availability/);
+  assert.match(text, /consecutive New York calendar days/);
 });
