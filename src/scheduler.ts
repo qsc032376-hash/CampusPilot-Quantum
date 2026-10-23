@@ -26,7 +26,12 @@ export function generateMockSchedule(request: ScheduleRequest): ScheduleResponse
     if (!Number.isSafeInteger(task.durationMinutes) || task.durationMinutes <= 0) {
       throw new Error('Task duration must be a positive whole number of minutes.');
     }
-    return { ...task, deadline: timestamp(task.dueAt) };
+    const deadline = timestamp(task.dueAt);
+    const notBefore = task.notBefore === undefined ? undefined : timestamp(task.notBefore);
+    if (notBefore !== undefined && notBefore >= deadline) {
+      throw new Error('Task notBefore must precede its deadline.');
+    }
+    return { ...task, deadline, notBefore };
   }).sort((a, b) => a.deadline - b.deadline || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const response: ScheduleResponse = { blocks: [], unscheduledTasks: [] };
   const location = request.locations[0];
@@ -37,7 +42,7 @@ export function generateMockSchedule(request: ScheduleRequest): ScheduleResponse
     }
     const duration = task.durationMinutes * MINUTE;
     const limit = Math.min(end, task.deadline);
-    let candidate = start;
+    let candidate = Math.max(start, task.notBefore ?? start);
     occupied.sort((a, b) => a.start - b.start);
     for (const interval of occupied) {
       if (interval.end <= candidate) continue;

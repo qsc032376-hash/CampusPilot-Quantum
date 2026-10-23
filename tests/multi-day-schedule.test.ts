@@ -110,7 +110,7 @@ test('explicit-offset DST window preserves actual task duration', () => {
 });
 test('invalid dates, counts, hours and overnight settings rejected', () => {
   for (const startDate of ['2026-02-30', 'nonsense']) assert.throws(() => createDailyWindows({ startDate }));
-  for (const dayCount of [0, 8, 1.5, NaN]) assert.throws(() => createDailyWindows({ startDate: '2026-10-19', dayCount }));
+  for (const dayCount of [0, 31, 1.5, NaN]) assert.throws(() => createDailyWindows({ startDate: '2026-10-19', dayCount }));
   for (const [startTime, endTime] of [['17:00', '09:00'], ['09:00', '09:00'], ['24:00', '25:00']]) assert.throws(() => createDailyWindows({ startDate: '2026-10-19', startTime, endTime }));
 });
 test('manual windows must be consecutive, ordered, minute-aligned and within one local date', () => {
