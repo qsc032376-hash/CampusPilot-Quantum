@@ -15,6 +15,10 @@ export type { TaskDraft } from '../taskValidation.ts';
 
 interface TaskFormProps {
   request: ScheduleRequest;
+  /** End of the currently viewed day; used as the default deadline. */
+  defaultDueIso: string | null;
+  /** Start of the whole selected range; the deadline must be after it. */
+  rangeStartIso: string | null;
   onAdd: (draft: TaskDraft) => void;
   onRemove: (id: string) => void;
 }
@@ -27,10 +31,10 @@ interface TaskFormProps {
  * starts empty, editing the deadline discards any earlier pick, and submitting
  * without a pick is refused.
  */
-export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
+export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemove }: TaskFormProps) {
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState('60');
-  const [due, setDue] = useState(() => isoToCampusInput(request.windowEnd));
+  const [due, setDue] = useState(() => isoToCampusInput(defaultDueIso ?? request.windowEnd));
   const [choice, setChoice] = useState<PendingChoice | null>(null);
   const [priority, setPriority] = useState('');
   const [courseCode, setCourseCode] = useState('');
@@ -54,7 +58,7 @@ export function TaskForm({ request, onAdd, onRemove }: TaskFormProps) {
       duration,
       due,
       choice,
-      windowStart: request.windowStart,
+      windowStart: rangeStartIso ?? request.windowStart,
       priority,
       courseCode,
     });

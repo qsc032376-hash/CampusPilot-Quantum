@@ -58,16 +58,36 @@ const result = {
   unscheduledTasks: [],
 };
 
+// One extra task whose deadline is late enough that a re-plan can move it to
+// another day; the fixed fixture in src/sample.ts is not modified.
+const browserRequest = {
+  ...sampleRequest,
+  tasks: [
+    ...sampleRequest.tasks,
+    { id: 'movable', title: 'Movable task', durationMinutes: 60, dueAt: '2026-10-21T21:00:00.000Z' },
+  ],
+};
+
 function Fixture() {
-  const [selected, setSelected] = useState(null);
-  return (
+  const [selected, setSelected] = useState(null);  return (
     <>
       <div className="cp-app" id="layout">
-        <WeeklySchedule request={request} result={result} selectedId={selected} onSelect={setSelected} />
+        <WeeklySchedule
+          windowStart={request.windowStart}
+          windowEnd={request.windowEnd}
+          dayLabel="Edge day"
+          classes={request.classes}
+          unavailablePeriods={request.unavailablePeriods}
+          blocks={result.blocks}
+          conflicts={[]}
+          hasPlan
+          selectedId={selected}
+          onSelect={setSelected}
+        />
         <p id="selected">{selected ?? 'none'}</p>
       </div>
       <div id="app">
-        <Dashboard request={sampleRequest} />
+        <Dashboard request={browserRequest} />
       </div>
     </>
   );
@@ -233,10 +253,63 @@ async function main() {
     const third = await clickAt(aCenter.x, aCenter.y);
     record('clicking A again selects A', third === 'A', `selected=${third}`);
 
+    // --- header range summary and readable example note (D regression) ---
+    const headerText = () => evaluate("document.querySelector('#app .cp-header').innerText");
+    const setEndTime = async (value) => {
+      await evaluate([
+        '(() => {',
+        "  const inputs = [...document.querySelectorAll('#app section[aria-labelledby=\"cp-range-heading\"] input[type=\"time\"]')];",
+        '  const input = inputs[1];',
+        '  if (!input) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        '  setter.call(input, ' + JSON.stringify(value) + ');',
+        "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+
+    const defaultHeader = await headerText();
+    record('header shows the default 09:00–17:00 range', defaultHeader.includes('09:00–17:00'), defaultHeader);
+    record(
+      'page renders no replacement characters',
+      !(await evaluate('document.body.innerText')).includes(String.fromCharCode(0xfffd)),
+      '',
+    );
+
+    await setEndTime('18:00');
+    const editedHeader = await headerText();
+    record('header follows the edited end time', editedHeader.includes('09:00–18:00'), editedHeader);
+    record('the un-interpolated placeholder is gone', !editedHeader.includes('{range.endTime}'), editedHeader);
+
+    const exampleNote = await evaluate(
+      "document.querySelector('#app section[aria-labelledby=\"cp-range-heading\"] .cp-panel__foot').innerText",
+    );
+    record(
+      'the example note is readable and marks demo data',
+      exampleNote.includes('demo data') &&
+        exampleNote.includes('not real courses') &&
+        !exampleNote.includes(String.fromCharCode(0xfffd)),
+      exampleNote,
+    );
+
+    await setEndTime('17:00');
+
     // Shared contract integration, rendered by the real Dashboard.
+    // Pin the range to the bundled sample date so the assertions stay deterministic.
     await evaluate("document.querySelector('#app .cp-schedule').scrollIntoView({block:'start'})");
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      if (!input) return 'missing';
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-19');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
     await evaluate(
-      "[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Build my day')).click()",
+      "[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Build plan')).click()",
     );
     await new Promise((resolve) => setTimeout(resolve, 400));
 
@@ -444,6 +517,136 @@ async function main() {
       /official rules/i.test(hslText) && hslText.includes('2-hour reservations'),
       '',
     );
+
+    // --- D P2 #1: re-plan must move the viewed day with the selected block ---
+    await evaluate("document.querySelector('#app .cp-results').scrollIntoView({block:'start'})");
+
+    const clickButton = (text) =>
+      evaluate(
+        "[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes(" +
+          JSON.stringify(text) +
+          ')).click()',
+      );
+    const setRangeDate = async (value) => {
+      await evaluate([
+        '(() => {',
+        "  const input = document.querySelector('#app section[aria-labelledby=\"cp-range-heading\"] input[type=\"date\"]');",
+        '  if (!input) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        '  setter.call(input, ' + JSON.stringify(value) + ');',
+        "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    };
+
+    // Clean slate: rebuild a multi-day plan on the fixed sample date.
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await setRangeDate('2026-10-19');
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    // Select the block that the added work will displace.
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app .cp-session')].find((item) =>
+        item.textContent.includes('Movable task'),
+      );
+      if (!button) return 'missing';
+      button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const dayBefore = await evaluate("(document.querySelector('#app .cp-daytab.is-active') || {}).textContent || ''");
+
+    // Two earlier-deadline blocks fill the day, so the selected block has to move.
+    const addFiller = async (title) => {
+      await evaluate([
+        '(() => {',
+        "  const form = document.querySelector('#app form.cp-form');",
+        '  if (!form) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        "  const titleInput = form.querySelector('input:not([type])');",
+        '  setter.call(titleInput, ' + JSON.stringify(title) + ');',
+        "  titleInput.dispatchEvent(new Event('input', { bubbles: true }));",
+        "  const minutes = form.querySelector('input[type=\"number\"]');",
+        "  setter.call(minutes, '240');",
+        "  minutes.dispatchEvent(new Event('input', { bubbles: true }));",
+        "  const due = form.querySelector('input[type=\"datetime-local\"]');",
+        "  setter.call(due, '2026-10-20T17:00');",
+        "  due.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await clickButton('Add task');
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    };
+    await addFiller('Filler A');
+    await addFiller('Filler B');
+
+    const afterReplan = await evaluate(`(() => {
+      const tabs = [...document.querySelectorAll('#app .cp-daytab')];
+      const rows = [...document.querySelectorAll('#app .cp-days__row')];
+      const selectedSession = document.querySelector('#app .cp-session.is-selected');
+      const row = selectedSession ? selectedSession.closest('.cp-days__row') : null;
+      return {
+        tabIndex: tabs.findIndex((tab) => tab.classList.contains('is-active')),
+        rowIndex: row ? rows.indexOf(row) : -1,
+        tab: tabs.find((tab) => tab.classList.contains('is-active'))?.textContent ?? null,
+        row: row ? row.querySelector('.cp-days__label').textContent : null,
+        session: selectedSession ? selectedSession.textContent : null,
+        slot: !!document.querySelector('#app .cp-slot.is-selected'),
+        where: ((document.querySelector('#app .cp-location__task') || {}).textContent) || '',
+      };
+    })()`);
+    record('re-plan keeps the surviving selection', !!afterReplan.session, JSON.stringify(afterReplan));
+    record(
+      'viewed day follows the re-planned block',
+      afterReplan.tabIndex >= 0 && afterReplan.tabIndex === afterReplan.rowIndex,
+      JSON.stringify(afterReplan),
+    );
+    record('timeline highlights the same block', afterReplan.slot, '');
+    record('Where card follows the same block', afterReplan.where.includes('Movable task'), afterReplan.where);
+    record(
+      'the selected block really moved to another day',
+      afterReplan.tab !== dayBefore,
+      dayBefore + ' -> ' + afterReplan.tab,
+    );
+
+    // --- D P2 #2: invalid hours must not stick after the range becomes valid ---
+    const setDailyEnd = async (value) => {
+      await evaluate(`(() => {
+        const inputs = [
+          ...document.querySelectorAll('#app section[aria-labelledby="cp-range-heading"] input[type="time"]'),
+        ];
+        const input = inputs[1];
+        if (!input) return 'missing';
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, ${JSON.stringify(value)});
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    };
+    const resultsError = "((document.querySelector('#app section[aria-labelledby=\"cp-results-heading\"] .cp-error') || {}).textContent || '')";
+
+    await setDailyEnd('08:00');
+    const invalidState = await evaluate(`(() => ({
+      error: ${resultsError},
+      sessions: document.querySelectorAll('#app .cp-session').length,
+    }))()`);
+    record('an invalid daily end shows a validation error', /end after they start/i.test(invalidState.error), JSON.stringify(invalidState));
+    record('an invalid range never presents the old plan', invalidState.sessions === 0, '');
+
+    await setDailyEnd('17:00');
+    const recovered = await evaluate(`(() => ({
+      error: ${resultsError},
+      sessions: document.querySelectorAll('#app .cp-session').length,
+    }))()`);
+    record('restoring valid hours clears the stale error', recovered.error === '', recovered.error);
+    record('restoring valid hours recomputes the existing plan', recovered.sessions > 0, String(recovered.sessions));
 
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");

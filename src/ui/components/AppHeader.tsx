@@ -1,14 +1,16 @@
 import type { ScheduleRequest, ScheduleResponse } from '../../types.ts';
-import { CAMPUS_TIME_ZONE, formatDuration, formatWindowLabel } from '../format.ts';
+import { CAMPUS_TIME_ZONE, formatDuration } from '../format.ts';
 
 interface AppHeaderProps {
   request: ScheduleRequest;
   result: ScheduleResponse | null;
+  /** Human-readable label for the selected multi-day range. */
+  rangeLabel: string;
   onReset: () => void;
 }
 
 /** Identity, at-a-glance counts, and the only global action. Purely presentational. */
-export function AppHeader({ request, result, onReset }: AppHeaderProps) {
+export function AppHeader({ request, result, rangeLabel, onReset }: AppHeaderProps) {
   const placedMinutes = (result?.blocks ?? []).reduce(
     (total, block) => total + (Date.parse(block.end) - Date.parse(block.start)) / 60_000,
     0,
@@ -20,7 +22,7 @@ export function AppHeader({ request, result, onReset }: AppHeaderProps) {
         <p className="cp-brand">CP / CAMPUSPILOT</p>
         <h1 className="cp-header__title">Make room for your next study session.</h1>
         <p className="cp-header__meta">
-          {formatWindowLabel(request.windowStart, request.windowEnd)} · all times {CAMPUS_TIME_ZONE}
+          {rangeLabel} · all times {CAMPUS_TIME_ZONE}
         </p>
         <p className="cp-header__meta">
           {request.locations.map((location) => location.name).join(' · ')}
