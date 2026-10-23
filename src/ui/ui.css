@@ -630,3 +630,34 @@
   color: var(--cp-soft);
 }
 .cp-week__range { font-weight: 400; }
+
+/* ---------- task mode switch ---------- */
+.cp-modetabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+
+.cp-modetab {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #cfd1c8;
+  border-radius: 999px;
+  background: #fdfcf9;
+  color: var(--cp-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cp-modetab:hover { background: #efece5; }
+.cp-modetab:focus-visible { outline: 3px solid var(--cp-ink); outline-offset: 2px; }
+.cp-modetab.is-active { background: var(--cp-brand); border-color: var(--cp-brand); color: #fff; }
+
+.cp-modetab__count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.16);
+  font-size: 11px;
+}
+
+.cp-task-pane[hidden] { display: none; }
+.cp-task-block { margin: 0; }
