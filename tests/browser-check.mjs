@@ -2994,7 +2994,14 @@ async function main() {
     const wideCard = await evaluate(`(() => {
       const card = document.querySelector('#app .cp-tour__card');
       const box = card.getBoundingClientRect();
-      return { width: Math.round(box.width), center: Math.round(box.left + box.width / 2), clientWidth: document.documentElement.clientWidth };
+      return {
+        width: Math.round(box.width),
+        center: Math.round(box.left + box.width / 2),
+        clientWidth: document.documentElement.clientWidth,
+        innerWidth: window.innerWidth,
+        scrollbar: window.innerWidth - document.documentElement.clientWidth,
+        scrollY: Math.round(window.scrollY),
+      };
     })()`);
     record(
       'the welcome card is a centred column on a wide screen',
@@ -3034,7 +3041,14 @@ async function main() {
     await tourKey('Escape', 'Escape', 27);
     const restoredFocus = await evaluate(`(() => {
       const replay = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
-      return { onReplay: !!replay && document.activeElement === replay };
+      const active = document.activeElement;
+      return {
+        onReplay: !!replay && active === replay,
+        activeTag: active ? active.tagName : null,
+        activeText: active ? (active.textContent || '').trim().slice(0, 24) : '',
+        replayExists: !!replay,
+        scrollY: Math.round(window.scrollY),
+      };
     })()`);
     record(
       'skipping returns focus to the control that opened the tour',
@@ -3207,11 +3221,27 @@ async function main() {
 
     await advanceTour(1);
     const atMap = await tourState();
+    const mapBox = await evaluate(`(() => {
+      const map = document.querySelector('#app .cp-map-mount');
+      const card = document.querySelector('#app .cp-tour__card');
+      if (!map || !card) return null;
+      const m = map.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      return {
+        viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight },
+        target: { top: Math.round(m.top), bottom: Math.round(m.bottom) },
+        card: { top: Math.round(c.top), bottom: Math.round(c.bottom) },
+        overlap: Math.max(0, Math.min(m.bottom, c.bottom) - Math.max(m.top, c.top)),
+        covered: Math.max(0, Math.min(m.bottom, c.bottom) - Math.max(m.top, c.top)) > 0,
+        scrollY: Math.round(window.scrollY),
+        visible: m.top < window.innerHeight && m.bottom > 0,
+      };
+    })()`);
     const mapAnchor = await anchorVisible('.cp-map-mount');
     record(
       'the map step points at the visible map',
-      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true,
-      JSON.stringify({ progress: atMap && atMap.progress, mapAnchor }),
+      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true && mapBox !== null && mapBox.covered === false,
+      JSON.stringify({ progress: atMap && atMap.progress, mapAnchor, mapBox }),
     );
     const markerStability = await evaluate(`(async () => {
       const pins = [...document.querySelectorAll('#app .cp-map__pin')];
@@ -3235,11 +3265,27 @@ async function main() {
 
     await advanceTour(1);
     const reservationStep = await tourState();
+    const reservationBox = await evaluate(`(() => {
+      const heading = document.querySelector('#app #cp-reservation-heading');
+      const card = document.querySelector('#app .cp-tour__card');
+      if (!heading || !card) return null;
+      const h = heading.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      return {
+        viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight },
+        target: { top: Math.round(h.top), bottom: Math.round(h.bottom) },
+        card: { top: Math.round(c.top), bottom: Math.round(c.bottom) },
+        overlap: Math.max(0, Math.min(h.bottom, c.bottom) - Math.max(h.top, c.top)),
+        covered: Math.max(0, Math.min(h.bottom, c.bottom) - Math.max(h.top, c.top)) > 0,
+        scrollY: Math.round(window.scrollY),
+        visible: h.top < window.innerHeight && h.bottom > 0,
+      };
+    })()`);
     const reservationAnchor = await anchorVisible('#cp-reservation-heading');
     record(
       'the reservation step points at the visible planner',
-      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true,
-      JSON.stringify({ progress: reservationStep && reservationStep.progress, reservationAnchor }),
+      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true && reservationBox !== null && reservationBox.covered === false,
+      JSON.stringify({ progress: reservationStep && reservationStep.progress, reservationAnchor, reservationBox }),
     );
 
     await advanceTour(1);
