@@ -14,9 +14,9 @@ The response types are unchanged. Omission defaults to `intense`, which returns 
 
 ## UI
 
-`src/ui/components/ScheduleIntensitySwitch.tsx` renders the pace control in the Dashboard's "Schedule range" panel, next to Build: **Relaxed** (the default, sends `'relaxed'`) and **High intensity** (sends `'intense'`), each with a one-line description.
+`src/ui/components/ScheduleIntensitySwitch.tsx` renders the pace control in the Dashboard's "Schedule range" panel, below the day-navigation controls; the Build button lives in the separate "Study plan" panel. The options are **Relaxed** (the default, sends `'relaxed'`) and **High intensity** (sends `'intense'`), each with a one-line description.
 
-The Dashboard owns the selection and passes it through its single planning entry (`planWith` → `runSchedule`), so Build, range edits, one-off task changes and series changes all use the current pace. Switching the pace re-plans an existing plan through the same validation gate as other settings changes, Reset returns to Relaxed, and browsing days or switching the task mode never changes the pace.
+The Dashboard owns the selection. Build, one-off task changes, series changes and switching the pace go through `planWith`, which validates the raw day-count text and the daily windows before calling `runSchedule` with the current intensity. Range edits validate the same two things themselves and then call `runSchedule` directly. Both paths pass the current intensity to `generateMultiDaySchedule`. Switching the pace re-plans an existing plan under the same validation, Reset returns to Relaxed, and browsing days or switching the task mode never changes the pace.
 
 ## Rules
 
