@@ -10,7 +10,13 @@ const result = generateSchedule(scheduleRequest, { intensity });
 ```
 
 For multi-day UI, pass `intensity` directly to `generateMultiDaySchedule({ windows, tasks, taskSeries, classes, unavailablePeriods, locations, intensity })`.
-The response types are unchanged. Omission defaults to `intense`, which returns the existing scheduler result unchanged. Invalid runtime values throw. No UI has been added; B should pass the selected value through every Build/replanning entry.
+The response types are unchanged. Omission defaults to `intense`, which returns the existing scheduler result unchanged. Invalid runtime values throw.
+
+## UI
+
+`src/ui/components/ScheduleIntensitySwitch.tsx` renders the pace control in the Dashboard's "Schedule range" panel, next to Build: **Relaxed** (the default, sends `'relaxed'`) and **High intensity** (sends `'intense'`), each with a one-line description.
+
+The Dashboard owns the selection and passes it through its single planning entry (`planWith` → `runSchedule`), so Build, range edits, one-off task changes and series changes all use the current pace. Switching the pace re-plans an existing plan through the same validation gate as other settings changes, Reset returns to Relaxed, and browsing days or switching the task mode never changes the pace.
 
 ## Rules
 
