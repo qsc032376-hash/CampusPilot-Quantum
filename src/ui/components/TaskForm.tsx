@@ -11,7 +11,8 @@ import {
 } from '../taskValidation.ts';
 import type { PendingChoice, TaskDraft } from '../taskValidation.ts';
 import { TaskLocationField } from './TaskLocationField.tsx';
-import { buildTaskLocation, defaultLocationDraft } from '../taskLocationDraft.ts';
+import { OptionalDetails } from './OptionalDetails.tsx';
+import { buildTaskLocation, defaultLocationDraft, locationSummary } from '../taskLocationDraft.ts';
 import type { LocationDraft } from '../taskLocationDraft.ts';
 
 export type { TaskDraft } from '../taskValidation.ts';
@@ -131,9 +132,18 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
           </label>
         </div>
 
-        <div className="cp-field-row cp-field-row--split">
-          <label className="cp-field">
-            <span className="cp-field__label">Course code (optional)</span>
+        <OptionalDetails summary={locationSummary(locationDraft, request.locations)}>
+          <TaskLocationField
+            idPrefix={fieldId}
+            locations={request.locations}
+            draft={locationDraft}
+            onChange={setLocationDraft}
+            allowLegacy={false}
+          />
+
+          <div className="cp-field-row cp-field-row--split">
+            <label className="cp-field">
+              <span className="cp-field__label">Course code (optional)</span>
             <input
               className="cp-input"
               value={courseCode}
@@ -144,18 +154,19 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
             />
           </label>
 
-          <label className="cp-field">
-            <span className="cp-field__label">Priority (optional)</span>
-            <select className="cp-input" value={priority} onChange={(event) => setPriority(event.target.value)}>
-              <option value="">None</option>
-              {PRIORITY_VALUES.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+            <label className="cp-field">
+              <span className="cp-field__label">Priority (optional)</span>
+              <select className="cp-input" value={priority} onChange={(event) => setPriority(event.target.value)}>
+                <option value="">None</option>
+                {PRIORITY_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </OptionalDetails>
 
         {preview.status === 'ambiguous' && (
           <label className="cp-field">
@@ -185,14 +196,6 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
             {preview.message}
           </p>
         )}
-
-        <TaskLocationField
-          idPrefix={fieldId}
-          locations={request.locations}
-          draft={locationDraft}
-          onChange={setLocationDraft}
-          allowLegacy={false}
-        />
 
         {error && (
           <p className="cp-error" role="alert">

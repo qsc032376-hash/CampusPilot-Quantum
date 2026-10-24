@@ -68,6 +68,20 @@ export function draftFromLocation(
   return { choice: 'custom', locationId: locations[0]?.id ?? '', customName: location.name };
 }
 
+/** Collapsed summary for the optional-details row. */
+export function locationSummary(draft: LocationDraft, locations: readonly CampusLocation[]): string {
+  if (draft.choice === 'legacy') return 'Location: Keep existing default';
+  if (draft.choice === 'campus') {
+    const found = locations.find((location) => location.id === draft.locationId);
+    return `Location: ${found ? found.name : 'Not set'}`;
+  }
+  if (draft.choice === 'custom') {
+    const name = draft.customName.trim();
+    return `Location: ${name || 'Not set'}`;
+  }
+  return 'Location: Not set';
+}
+
 export type BlockLocationDisplay =
   | { kind: 'legacy'; locationId: string }
   | { kind: 'none' }

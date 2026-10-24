@@ -16,6 +16,8 @@ import {
 import type { SeriesDraft } from '../recurring.ts';
 import type { CampusLocation } from '../../types.ts';
 import { TaskLocationField } from './TaskLocationField.tsx';
+import { OptionalDetails } from './OptionalDetails.tsx';
+import { locationSummary } from '../taskLocationDraft.ts';
 
 export interface OneOffFromSeries {
   title: string;
@@ -191,7 +193,10 @@ export function RecurringTaskForm({
           />
         </label>
 
-        <div className="cp-field-row cp-field-row--split">
+        <h4 id={`${fieldId}-pattern`} className="cp-subhead">
+          Repeating pattern
+        </h4>
+        <div className="cp-field-row cp-field-row--split" role="group" aria-labelledby={`${fieldId}-pattern`}>
           <label className="cp-field" htmlFor={`${fieldId}-minutes`}>
             <span className="cp-field__label">Minutes</span>
             <input
@@ -289,8 +294,9 @@ export function RecurringTaskForm({
           </label>
         </div>
 
-        <div className="cp-field-row cp-field-row--split">
-          <label className="cp-field" htmlFor={`${fieldId}-priority`}>
+        <OptionalDetails summary={locationSummary(draft.location, locations)}>
+          <div className="cp-field-row cp-field-row--split">
+            <label className="cp-field" htmlFor={`${fieldId}-priority`}>
             <span className="cp-field__label">Priority (optional)</span>
             <select
               id={`${fieldId}-priority`}
@@ -336,6 +342,7 @@ export function RecurringTaskForm({
           onChange={(next) => patch({ location: next })}
           allowLegacy={editingId !== null && legacyEditing}
         />
+        </OptionalDetails>
 
         <div className="cp-form__actions">
           <button type="submit" className="cp-button">

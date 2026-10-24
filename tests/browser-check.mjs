@@ -340,8 +340,13 @@ async function main() {
       '',
     );
     record(
-      'task form exposes optional priority and course code',
-      appText.includes('Priority (optional)') && appText.includes('Course code (optional)'),
+      'task form keeps optional priority and course code behind the disclosure',
+      await evaluate(`(() => {
+        const form = document.querySelector('#app form.cp-form');
+        if (!form || !form.querySelector('.cp-optional__toggle')) return false;
+        const text = form.textContent || '';
+        return text.includes('Priority (optional)') && text.includes('Course code (optional)');
+      })()`),
       '',
     );
 
@@ -1715,6 +1720,102 @@ async function main() {
     await clickButton('Reset');
     await new Promise((resolve) => setTimeout(resolve, 400));
     record('reset restores the default no-location choice', (await locationSelect()) === 'none', await locationSelect());
+
+    // --- optional details disclosure ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const optionalState = () =>
+      evaluate(`(() => {
+        const toggle = document.querySelector('#app form.cp-form .cp-optional__toggle');
+        const panel = document.querySelector('#app form.cp-form .cp-optional__panel');
+        if (!toggle || !panel) return null;
+        const custom = panel.querySelector('input[id$="-location-custom"]');
+        return {
+          expanded: toggle.getAttribute('aria-expanded'),
+          hidden: panel.hasAttribute('hidden'),
+          summary: ((toggle.querySelector('.cp-optional__summary') || {}).textContent) || '',
+          customVisible: !!custom && !custom.closest('[hidden]'),
+        };
+      })()`);
+
+    const collapsed = await optionalState();
+    record(
+      'optional details start collapsed with a location summary',
+      collapsed.expanded === 'false' &&
+        collapsed.hidden === true &&
+        collapsed.summary.trim() === 'Location: Not set' &&
+        collapsed.customVisible === false,
+      JSON.stringify(collapsed),
+    );
+
+    await evaluate("document.querySelector('#app form.cp-form .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const expanded = await optionalState();
+    record(
+      'clicking optional details reveals the fields',
+      expanded.expanded === 'true' && expanded.hidden === false,
+      JSON.stringify(expanded),
+    );
+
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'campus:ohio-union'),
+      );
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'campus:ohio-union');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const campusSummary = await optionalState();
+    record(
+      'the summary shows the chosen campus place',
+      campusSummary.summary.trim() === 'Location: Ohio Union',
+      JSON.stringify(campusSummary),
+    );
+
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'other'),
+      );
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'other');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const customState = await optionalState();
+    record(
+      'the custom name field appears only for Other',
+      customState.customVisible === true && customState.summary.trim() === 'Location: Not set',
+      JSON.stringify(customState),
+    );
+
+    // Switching the task mode must keep the disclosure open and keep the draft.
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const afterMode = await optionalState();
+    record(
+      'a mode switch keeps the disclosure and the draft',
+      afterMode.expanded === 'true' && afterMode.customVisible === true,
+      JSON.stringify(afterMode),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const afterDisclosureReset = await optionalState();
+    record(
+      'reset collapses the disclosure and clears the location',
+      afterDisclosureReset.expanded === 'false' &&
+        afterDisclosureReset.hidden === true &&
+        afterDisclosureReset.summary.trim() === 'Location: Not set' &&
+        afterDisclosureReset.customVisible === false,
+      JSON.stringify(afterDisclosureReset),
+    );
 
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");

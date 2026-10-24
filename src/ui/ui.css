@@ -665,3 +665,31 @@
 /* ---------- schedule intensity ---------- */
 .cp-intensity { margin: 0 0 12px; }
 .cp-intensity .cp-field__label { display: block; margin-bottom: 6px; }
+
+/* ---------- optional task details ---------- */
+.cp-optional { margin: 0 0 12px; }
+
+.cp-optional__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px dashed var(--cp-line);
+  border-radius: 8px;
+  background: #fdfcf9;
+  color: var(--cp-ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cp-optional__toggle:hover { background: #efece5; }
+.cp-optional__toggle:focus-visible { outline: 3px solid var(--cp-ink); outline-offset: 2px; }
+.cp-optional__label { font-weight: 700; }
+.cp-optional__summary { color: var(--cp-soft); }
+.cp-optional__chevron { margin-left: auto; font-weight: 700; }
+.cp-optional__panel { padding: 10px 2px 0; }
+.cp-optional__panel[hidden] { display: none; }
