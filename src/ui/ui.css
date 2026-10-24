@@ -661,3 +661,7 @@
 
 .cp-task-pane[hidden] { display: none; }
 .cp-task-block { margin: 0; }
+
+/* ---------- schedule intensity ---------- */
+.cp-intensity { margin: 0 0 12px; }
+.cp-intensity .cp-field__label { display: block; margin-bottom: 6px; }
