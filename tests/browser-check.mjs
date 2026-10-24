@@ -2478,7 +2478,7 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 450));
 
     const caveat = await evaluate(`(() => {
-      const note = document.querySelector('#app .cp-panel__note');
+      const note = document.querySelector('#app .cp-caveat');
       const box = note ? note.getBoundingClientRect() : null;
       const help = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
         (b.getAttribute('aria-label') || '').includes('how planning works'),
@@ -2490,6 +2490,73 @@ async function main() {
         selected: document.querySelectorAll('#app .cp-session.is-selected').length,
       };
     })()`);
+    for (const [width, height] of [[320, 800], [375, 812]]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      // First screen means the page as loaded, so measure from the document top.
+      await evaluate("document.querySelector('#app').scrollIntoView({ block: 'start' })");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const firstScreen = await evaluate(`(() => {
+        const note = document.querySelector('#app .cp-caveat');
+        const box = note ? note.getBoundingClientRect() : null;
+        const help = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+          (b.getAttribute('aria-label') || '').includes('how planning works'),
+        );
+        const header = document.querySelector('#app .cp-header');
+        const app = document.querySelector('#app');
+        return {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          top: box ? Math.round(box.top) : null,
+          bottom: box ? Math.round(box.bottom) : null,
+          visible: !!box && box.height > 0 && box.width > 0,
+          inFirstScreen: !!box && box.top >= 0 && box.bottom <= window.innerHeight,
+          aboveMain: (() => {
+            const main = document.querySelector('#app .cp-main');
+            return !!(note && main && (note.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING));
+          })(),
+          helpExpanded: help ? help.getAttribute('aria-expanded') : null,
+          selected: document.querySelectorAll('#app .cp-session.is-selected').length,
+          headerVisible: !!header && header.getBoundingClientRect().height > 0,
+          appOffset: app && box ? Math.round(box.top - app.getBoundingClientRect().top) : null,
+          headerHeight: header ? Math.round(header.getBoundingClientRect().height) : 0,
+          titleHeight: (() => {
+            const title = document.querySelector('#app .cp-header__title');
+            return title ? Math.round(title.getBoundingClientRect().height) : 0;
+          })(),
+          titleFont: (() => {
+            const title = document.querySelector('#app .cp-header__title');
+            return title ? getComputedStyle(title).fontSize : '';
+          })(),
+          statsTop: (() => {
+            const stats = document.querySelector('#app .cp-stats');
+            return stats ? Math.round(stats.getBoundingClientRect().top) : null;
+          })(),
+        };
+      })()`);
+      record(
+        `the availability caveat is in the first screen at ${width}x${height}`,
+        firstScreen.width === width &&
+          firstScreen.height === height &&
+          firstScreen.clientWidth === width &&
+          firstScreen.scrollWidth === width &&
+          firstScreen.visible &&
+          firstScreen.inFirstScreen &&
+          firstScreen.aboveMain &&
+          firstScreen.appOffset !== null &&
+          firstScreen.appOffset >= 0 &&
+          firstScreen.appOffset < 500 &&
+          firstScreen.headerVisible &&
+          firstScreen.helpExpanded === 'false' &&
+          firstScreen.selected === 0,
+        JSON.stringify(firstScreen),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
     record(
       'the availability caveat stays visible while the help block is collapsed',
       caveat.visible &&

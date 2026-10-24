@@ -25,6 +25,9 @@ export function AppHeader({ request, result, rangeLabel, onReset }: AppHeaderPro
           {rangeLabel}
           <span className="cp-example-tag">Example data</span>
         </p>
+        <p className="cp-caveat">
+          A plan does not mean a place is open, a room is available or a booking exists.
+        </p>
       </div>
 
       <dl className="cp-stats">

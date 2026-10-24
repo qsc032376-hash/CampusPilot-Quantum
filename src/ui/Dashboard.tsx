@@ -470,10 +470,6 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
             <ScheduleIntensitySwitch intensity={intensity} onChange={handleIntensityChange} />
 
-            <p className="cp-panel__note">
-              A plan does not mean a place is open, a room is available or a booking exists.
-            </p>
-
             <OptionalDetails
               label="How planning works"
               summary="Replanning, demo data and availability"
