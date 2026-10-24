@@ -11,6 +11,7 @@ import http from 'node:http';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { intersectionArea } from './tourGeometry.mjs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -198,6 +199,10 @@ async function main() {
 
     await send('Page.enable');
     await send('Runtime.enable');
+    // A background tab reports visibilityState 'hidden', which throttles rAF and
+    // pauses the tour transitions; make the test page visible and reproducible.
+    await send('Page.bringToFront');
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     for (let attempt = 0; attempt < 40; attempt += 1) {
       if (await evaluate("document.querySelectorAll('#layout .cp-slot').length === 2 && !!document.querySelector('#app .cp-schedule')")) break;
@@ -3019,6 +3024,9 @@ async function main() {
       JSON.stringify(welcome),
     );
 
+    const visibility = await evaluate("({ state: document.visibilityState, hidden: document.hidden })");
+    record('the test page is visible while the tour runs', visibility.state === 'visible' && visibility.hidden === false, JSON.stringify(visibility));
+
     const wideCard = await evaluate(`(() => {
       const card = document.querySelector('#app .cp-tour__card');
       const box = card.getBoundingClientRect();
@@ -3160,9 +3168,11 @@ async function main() {
         const c = card ? card.getBoundingClientRect() : null;
         const w = c ? Math.min(t.right, c.right) - Math.max(t.left, c.left) : 0;
         const h = c ? Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top) : 0;
+        const area = w > 0 && h > 0 ? w * h : 0;
         return {
           visible: Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0,
-          overlap: w > 0 && h > 0 ? Math.round(w * h) : 0,
+          overlap: area,
+          overlapLog: Math.round(area * 1000) / 1000,
           viewport: { vw, vh },
           rect: { left: Math.round(t.left), top: Math.round(t.top), right: Math.round(t.right), bottom: Math.round(t.bottom) },
           scrollY: Math.round(window.scrollY),
@@ -3233,20 +3243,47 @@ async function main() {
       };
       const card = document.querySelector('#app .cp-tour__card');
       const probe = document.createElement('div');
-      probe.style.cssText = 'position:fixed;left:-400px;top:80px;width:120px;height:80px;';
+      probe.style.cssText = 'position:fixed;left:-400px;top:80px;width:100px;height:100px;';
       document.body.appendChild(probe);
       const offScreen = measure(probe, null);
+
       const c = card.getBoundingClientRect();
-      probe.style.left = String(Math.round(c.left + 10)) + 'px';
-      probe.style.top = String(Math.round(c.top + 10)) + 'px';
-      const covered = measure(probe, card);
+      // A sub-pixel overlap built with a transform, so layout rounding cannot
+      // collapse it to zero: 0.25px on each axis, a real positive intersection.
+      probe.style.left = String(c.right) + 'px';
+      probe.style.top = String(c.bottom) + 'px';
+      probe.style.transform = 'translate(-0.25px, -0.25px)';
+      const tiny = measure(probe, card);
+
+      // Far left of the card: horizontally separated, no overlap at all.
+      probe.style.left = String(c.left - 140) + 'px';
+      probe.style.top = String(c.top + 10) + 'px';
+      const separated = measure(probe, card);
+
       probe.remove();
-      return { offVisible: offScreen.visible, coveredOverlap: covered.overlap };
+      return {
+        offVisible: offScreen.visible,
+        tinyOverlap: tiny.overlap,
+        separatedOverlap: separated.overlap,
+      };
     })()`);
+    const cardAnchor = { left: 100, top: 100, right: 300, bottom: 300 };
+    const geometryCases = {
+      quarterPixel: intersectionArea(cardAnchor, { left: 299.5, top: 299.5, right: 399.5, bottom: 399.5 }),
+      touching: intersectionArea(cardAnchor, { left: 300, top: 100, right: 400, bottom: 200 }),
+      separated: intersectionArea(cardAnchor, { left: 400, top: 100, right: 500, bottom: 200 }),
+      inside: intersectionArea(cardAnchor, { left: 150, top: 150, right: 250, bottom: 250 }),
+    };
     record(
-      'the geometry helper rejects an off-screen target and a real card overlap',
-      geometryNegative.offVisible === false && geometryNegative.coveredOverlap > 0,
-      JSON.stringify(geometryNegative),
+      'a 0.25px² intersection counts as overlap while touching and separated cases do not',
+      geometryCases.quarterPixel === 0.25 &&
+        geometryCases.quarterPixel > 0 &&
+        geometryCases.touching === 0 &&
+        geometryCases.separated === 0 &&
+        Math.abs(geometryCases.inside - 10000) < 1e-9 &&
+        geometryNegative.offVisible === false &&
+        geometryNegative.separatedOverlap === 0,
+      JSON.stringify({ ...geometryCases, ...geometryNegative }),
     );
 
     await advanceTour(1);
