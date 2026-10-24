@@ -1940,20 +1940,48 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 250));
 
     for (const width of [320, 375]) {
-      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: true });
-      await new Promise((resolve) => setTimeout(resolve, 350));
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await evaluate(`(() => {
+        const pane = document.querySelector('#app .cp-task-pane');
+        if (pane && pane.hasAttribute('hidden')) {
+          const tab = [...document.querySelectorAll('#app .cp-modetab')].find((b) => b.textContent.includes('One-time'));
+          if (tab) tab.click();
+        }
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await evaluate(`(() => {
+        const toggle = document.querySelector('#app form.cp-form .cp-optional__toggle');
+        if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 300));
       const narrow = await evaluate(`(() => {
-        const summary = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"] .cp-optional__summary');
+        const form = document.querySelector('#app form.cp-form');
+        const panel = form.querySelector('.cp-optional__panel');
+        const select = form.querySelector('.cp-location-field select');
+        const rows = [...form.querySelectorAll('.cp-field-row--split')];
+        const courses = rows[rows.length - 1];
+        const tracks = courses ? getComputedStyle(courses).gridTemplateColumns : '';
+        const columns = tracks ? tracks.replace(/\([^)]*\)/g, 'X').trim().split(/\s+/).length : 0;
+        const selectBox = select ? select.getBoundingClientRect() : null;
         return {
-          summary: summary ? summary.textContent.trim() : '',
-          title: summary ? summary.getAttribute('title') : '',
+          expanded: form.querySelector('.cp-optional__toggle').getAttribute('aria-expanded'),
+          panelVisible: !panel.hasAttribute('hidden') && panel.getBoundingClientRect().height > 0,
+          selectVisible: !!selectBox && selectBox.width > 0 && selectBox.height > 0,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          columns,
         };
       })()`);
       record(
-        `a 120-character location summary fits a ${width}px viewport`,
-        narrow.overflow <= 1 && narrow.summary.length > 0 && narrow.title.length > narrow.summary.length,
-        JSON.stringify({ ...narrow, summary: narrow.summary.slice(0, 24), title: narrow.title.slice(0, 24) }),
+        `the expanded layout has no horizontal overflow at ${width}px`,
+        narrow.expanded === 'true' &&
+          narrow.panelVisible &&
+          narrow.selectVisible &&
+          narrow.overflow <= 1 &&
+          narrow.columns === 1,
+        JSON.stringify(narrow),
       );
     }
     await send('Emulation.clearDeviceMetricsOverride', {});
@@ -2276,20 +2304,15 @@ async function main() {
           label: panel.getAttribute('aria-label'),
         };
       })()`);
-    await evaluate(`(() => {
-      const toggle = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
-        (b.getAttribute('aria-label') || '').includes('how planning works'),
-      );
-      if (toggle && toggle.getAttribute('aria-expanded') === 'true') toggle.click();
-      return 'ok';
-    })()`);
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    const howCollapsed = await howSection();
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const howDefault = await howSection();
     record(
-      'How planning works starts collapsed',
-      howCollapsed && howCollapsed.expanded === 'false' && howCollapsed.hidden === true,
-      JSON.stringify(howCollapsed && { expanded: howCollapsed.expanded, hidden: howCollapsed.hidden }),
+      'How planning works starts collapsed after reset',
+      howDefault && howDefault.expanded === 'false' && howDefault.hidden === true,
+      JSON.stringify(howDefault && { expanded: howDefault.expanded, hidden: howDefault.hidden }),
     );
+
     await evaluate(`[...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
       (b.getAttribute('aria-label') || '').includes('how planning works')).click()`);
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -2298,6 +2321,15 @@ async function main() {
       'How planning works opens with readable text',
       howOpen && howOpen.expanded === 'true' && howOpen.text.length > 40 && /demo data/i.test(howOpen.text),
       JSON.stringify(howOpen && { expanded: howOpen.expanded, text: howOpen.text.slice(0, 80) }),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const howReset = await howSection();
+    record(
+      'reset collapses How planning works again',
+      howReset && howReset.expanded === 'false' && howReset.hidden === true,
+      JSON.stringify(howReset && { expanded: howReset.expanded }),
     );
 
     const paceText = () =>
@@ -2320,26 +2352,43 @@ async function main() {
 
     await clickButton('Relaxed');
     await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const toggle = document.querySelector('#app form.cp-form .cp-optional__toggle');
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
     const disclosureLayout = await evaluate(`(() => {
-      const row = document.querySelector('#app form.cp-form .cp-optional__row');
+      const form = document.querySelector('#app form.cp-form');
+      const row = form.querySelector('.cp-optional__row');
       const toggle = row.querySelector('.cp-optional__toggle');
       const summary = row.querySelector('.cp-optional__summary');
+      const panel = form.querySelector('.cp-optional__panel');
+      const select = form.querySelector('.cp-location-field select');
       const buttonBox = toggle.getBoundingClientRect();
       const summaryBox = summary.getBoundingClientRect();
-      const select = document.querySelector('#app form.cp-form .cp-location-field select');
-      const panel = document.querySelector('#app form.cp-form .cp-optional__panel');
+      const panelBox = panel.getBoundingClientRect();
+      const selectBox = select ? select.getBoundingClientRect() : null;
       return {
+        expanded: toggle.getAttribute('aria-expanded'),
+        panelVisible: !panel.hasAttribute('hidden') && panelBox.width > 0 && panelBox.height > 0,
+        selectVisible: !!selectBox && selectBox.width > 0 && selectBox.height > 0,
         buttonOutside: !summary.contains(toggle),
         buttonRight: buttonBox.left >= summaryBox.right - 1,
         buttonSize: Math.round(buttonBox.width) >= 24 && Math.round(buttonBox.height) >= 24,
-        ariaExpanded: toggle.getAttribute('aria-expanded'),
         hasControls: !!toggle.getAttribute('aria-controls'),
-        selectFullWidth: select ? Math.round(select.getBoundingClientRect().width) >= Math.round(panel.getBoundingClientRect().width) - 2 : false,
+        selectFullWidth:
+          !!selectBox && Math.round(selectBox.width) >= Math.round(select.parentElement.getBoundingClientRect().width) - 1,
       };
     })()`);
     record(
       'Optional details keeps a separate expand button and a full-width location select',
-      disclosureLayout.buttonOutside &&
+      disclosureLayout.expanded === 'true' &&
+        disclosureLayout.panelVisible &&
+        disclosureLayout.selectVisible &&
+        disclosureLayout.buttonOutside &&
         disclosureLayout.buttonRight &&
         disclosureLayout.buttonSize &&
         disclosureLayout.hasControls &&
