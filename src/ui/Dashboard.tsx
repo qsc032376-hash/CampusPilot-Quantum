@@ -76,6 +76,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   /** Planning pace; every entry that plans must pass this value through. */
   const [intensity, setIntensity] = useState<ScheduleIntensity>('relaxed');
   const [howOpen, setHowOpen] = useState(false);
+  /** Successful planner runs; exposed for the regression that browsing never replans. */
+  const [planRuns, setPlanRuns] = useState(0);
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -112,6 +114,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       setMulti(output);
       setMessage(null);
       setHasBuilt(true);
+      setPlanRuns((current) => current + 1);
       return output;
     } catch (error) {
       setMulti(null);
@@ -258,12 +261,12 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     if (output) syncSelection(output, selectedId);
   }
 
-  /** Switching the viewed day never re-runs the planner. */
+  /**
+   * Switching the viewed day never re-runs the planner and never clears the
+   * selected block, so its details stay visible while browsing other days.
+   */
   function handleSelectDate(date: string) {
     setSelectedDate(date);
-    if (!selectedId) return;
-    const block = multi?.result.blocks.find((candidate) => candidate.id === selectedId);
-    if (!block || campusDateOf(block.start) !== date) setSelectedId(null);
   }
 
   function handleSelectBlock(id: string | null) {
@@ -320,7 +323,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const selectedBlock = multi?.result.blocks.find((block) => block.id === selectedId) ?? null;
 
   return (
-    <div className="cp-app">
+    <div className="cp-app" data-plan-runs={planRuns}>
       <AppHeader request={request} result={multi?.result ?? null} rangeLabel={rangeLabel} onReset={handleReset} />
 
       <main className="cp-main">
@@ -466,6 +469,10 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             </div>
 
             <ScheduleIntensitySwitch intensity={intensity} onChange={handleIntensityChange} />
+
+            <p className="cp-panel__note">
+              A plan does not mean a place is open, a room is available or a booking exists.
+            </p>
 
             <OptionalDetails
               label="How planning works"

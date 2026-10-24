@@ -2419,6 +2419,87 @@ async function main() {
     await send('Emulation.clearDeviceMetricsOverride', {});
     await new Promise((resolve) => setTimeout(resolve, 300));
 
+    // --- D QA: the availability caveat is always visible, browsing keeps the selection ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+      if (button) button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    const caveat = await evaluate(`(() => {
+      const note = document.querySelector('#app .cp-panel__note');
+      const box = note ? note.getBoundingClientRect() : null;
+      const help = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+        (b.getAttribute('aria-label') || '').includes('how planning works'),
+      );
+      return {
+        text: note ? note.textContent.trim() : '',
+        visible: !!box && box.height > 0 && box.width > 0,
+        helpExpanded: help ? help.getAttribute('aria-expanded') : null,
+        selected: document.querySelectorAll('#app .cp-session.is-selected').length,
+      };
+    })()`);
+    record(
+      'the availability caveat stays visible while the help block is collapsed',
+      caveat.visible &&
+        /does not mean a place is open/i.test(caveat.text) &&
+        caveat.helpExpanded === 'false' &&
+        caveat.selected === 0,
+      JSON.stringify(caveat),
+    );
+
+    const browseState = () =>
+      evaluate(`(() => ({
+        runs: document.querySelector('#app .cp-app').getAttribute('data-plan-runs'),
+        nav: ((document.querySelector('#app .cp-daynav__label') || {}).textContent || '').trim(),
+        where: ((document.querySelector('#app .cp-location__name') || {}).textContent || '').trim(),
+        selected: document.querySelectorAll('#app .cp-session.is-selected').length,
+      }))()`);
+
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-19');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+      if (button) button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    record(
+      'the browse case has a plan to select from',
+      (await evaluate("document.querySelectorAll('#app .cp-session').length")) > 0,
+      '',
+    );
+    await evaluate("document.querySelectorAll('#app .cp-session')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const beforeBrowse = await browseState();
+    await evaluate("[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Next day')).click()");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const afterBrowse = await browseState();
+
+    record(
+      'browsing another day does not re-run the planner',
+      Number(afterBrowse.runs) === Number(beforeBrowse.runs),
+      JSON.stringify({ before: beforeBrowse.runs, after: afterBrowse.runs }),
+    );
+    record(
+      'browsing another day keeps the selected block and its details',
+      beforeBrowse.selected === 1 &&
+        afterBrowse.selected === 1 &&
+        afterBrowse.where === beforeBrowse.where &&
+        afterBrowse.where.length > 0 &&
+        afterBrowse.nav !== beforeBrowse.nav,
+      JSON.stringify({ before: beforeBrowse, after: afterBrowse }),
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {
