@@ -14,6 +14,8 @@ import {
   validateDraft,
 } from '../recurring.ts';
 import type { SeriesDraft } from '../recurring.ts';
+import type { CampusLocation } from '../../types.ts';
+import { TaskLocationField } from './TaskLocationField.tsx';
 
 export interface OneOffFromSeries {
   title: string;
@@ -25,6 +27,8 @@ export interface OneOffFromSeries {
 
 interface RecurringTaskFormProps {
   series: readonly TaskSeries[];
+  /** Campus catalog used for the per-series location choice. */
+  locations: readonly CampusLocation[];
   /** Calendar dates of the current range, used only to count occurrences. */
   dates: readonly string[];
   defaultStartDate: string;
@@ -51,6 +55,7 @@ function makeSeriesId(): string {
  */
 export function RecurringTaskForm({
   series,
+  locations,
   dates,
   defaultStartDate,
   rangeStart,
@@ -61,10 +66,12 @@ export function RecurringTaskForm({
   onDeleteSeries,
   onAddOneOff,
 }: RecurringTaskFormProps) {
-  const [draft, setDraft] = useState<SeriesDraft>(() => emptyDraft(defaultStartDate));
+  const [draft, setDraft] = useState<SeriesDraft>(() => emptyDraft(defaultStartDate, locations));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startTouched, setStartTouched] = useState(false);
+  /** Editing a series whose location is undefined keeps that legacy choice until changed. */
+  const [legacyEditing, setLegacyEditing] = useState(false);
   const fieldId = useId();
 
   // The start date follows the viewed day until the user edits it or opens a
@@ -79,10 +86,11 @@ export function RecurringTaskForm({
   }
 
   function resetDraft() {
-    setDraft(emptyDraft(defaultStartDate));
+    setDraft(emptyDraft(defaultStartDate, locations));
     setEditingId(null);
     setError(null);
     setStartTouched(false);
+    setLegacyEditing(false);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -97,7 +105,7 @@ export function RecurringTaskForm({
       );
       return;
     }
-    const message = validateDraft(draft);
+    const message = validateDraft(draft, locations);
     if (message) {
       setError(message);
       return;
@@ -130,7 +138,7 @@ export function RecurringTaskForm({
     }
 
     const id = editingId ?? makeSeriesId();
-    const built = draftToSeries(draft, id);
+    const built = draftToSeries(draft, id, locations);
     if (editingId) onUpdateSeries(built);
     else onAddSeries(built);
     resetDraft();
@@ -143,10 +151,12 @@ export function RecurringTaskForm({
   }
 
   function startEdit(item: TaskSeries) {
-    setDraft(seriesToDraft(item));
+    setDraft(seriesToDraft(item, locations));
     setEditingId(item.id);
     setError(null);
     setStartTouched(true);
+    // An undefined location stays undefined unless the user picks a new value.
+    setLegacyEditing(item.location === undefined);
   }
 
   function toggleWeekday(day: number) {
@@ -318,6 +328,14 @@ export function RecurringTaskForm({
             {error}
           </p>
         )}
+
+        <TaskLocationField
+          idPrefix={fieldId}
+          locations={locations}
+          draft={draft.location}
+          onChange={(next) => patch({ location: next })}
+          allowLegacy={editingId !== null && legacyEditing}
+        />
 
         <div className="cp-form__actions">
           <button type="submit" className="cp-button">

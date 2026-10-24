@@ -337,6 +337,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
               <RecurringTaskForm
                 key={`series-${seriesFormKey}`}
                 series={series}
+                locations={request.locations}
                 dates={preview.dates}
                 defaultStartDate={selectedDate}
                 rangeStart={range.startDate}

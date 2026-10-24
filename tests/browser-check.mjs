@@ -1562,6 +1562,160 @@ async function main() {
       JSON.stringify(afterSpace.pressed),
     );
 
+    // --- per-task locations ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const locationSelect = () =>
+      evaluate(`(() => {
+        const form = document.querySelector('#app form.cp-form');
+        const select = [...form.querySelectorAll('select')].find((item) =>
+          [...item.options].some((option) => option.value.startsWith('campus:')),
+        );
+        return select ? select.value : 'missing';
+      })()`);
+    const setLocationSelect = async (value) => {
+      await evaluate([
+        '(() => {',
+        "  const form = document.querySelector('#app form.cp-form');",
+        '  const select = [...form.querySelectorAll("select")].find((item) =>',
+        '    [...item.options].some((option) => option.value.startsWith("campus:")),',
+        '  );',
+        '  if (!select) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;",
+        '  setter.call(select, ' + JSON.stringify(value) + ');',
+        "  select.dispatchEvent(new Event('change', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+    const addOneOff = async (title, customName) => {
+      await evaluate([
+        '(() => {',
+        "  const form = document.querySelector('#app form.cp-form');",
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        '  const titleInput = form.querySelector("input:not([type])");',
+        '  setter.call(titleInput, ' + JSON.stringify(title) + ');',
+        "  titleInput.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  const due = form.querySelector("input[type=\\"datetime-local\\"]");',
+        "  setter.call(due, '2026-10-20T17:00');",
+        "  due.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  const custom = form.querySelector("input[id$=\\"-location-custom\\"]");',
+        '  const customName = ' + JSON.stringify(customName ?? '') + ';',
+        '  if (custom && customName) {',
+        '    setter.call(custom, customName);',
+        "    custom.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  }',
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await clickButton('Add task');
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const buildNow = async () => {
+      await evaluate(`(() => {
+        const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+        if (!button) return 'missing';
+        button.click();
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    };
+    const selectSession = async (title) => {
+      const result = await evaluate([
+        '(() => {',
+        '  const item = [...document.querySelectorAll("#app .cp-session")].find((el) =>',
+        '    el.textContent.includes(' + JSON.stringify(title) + '),',
+        '  );',
+        '  if (!item) return "missing";',
+        '  item.click();',
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return result;
+    };
+    const whereName = () => evaluate(`((document.querySelector('#app .cp-location__name') || {}).textContent || '')`);
+    const whereStatus = () => evaluate(`((document.querySelector('#app .cp-location__status') || {}).textContent || '')`);
+
+    record('a new task defaults to no location', (await locationSelect()) === 'none', '');
+    await addOneOff('Task without place');
+    await buildNow();
+    record('the no-location task can be selected', (await selectSession('Task without place')) === 'ok', '');
+    record(
+      'a task with no location still schedules and assumes nothing',
+      (await whereName()).trim() === 'No location set' && /no default is applied/i.test(await whereStatus()),
+      (await whereName()) + ' | ' + (await whereStatus()),
+    );
+
+    await setLocationSelect('campus:ohio-union');
+    await addOneOff('Task at the union');
+    await buildNow();
+    record('the campus task can be selected', (await selectSession('Task at the union')) === 'ok', '');
+    record('a campus choice is shown in Where', (await whereName()).trim() === 'Ohio Union', await whereName());
+
+    await setLocationSelect('other');
+    await addOneOff('Task at my desk', 'My desk');
+    await buildNow();
+    record('the custom task can be selected', (await selectSession('Task at my desk')) === 'ok', '');
+    record(
+      'a custom name is shown as plain task text',
+      (await whereName()).trim() === 'My desk' && /not checked against campus data/i.test(await whereStatus()),
+      (await whereName()) + ' | ' + (await whereStatus()),
+    );
+
+    // A series keeps its location and its occurrences inherit it.
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Series at Thompson');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const frequency = form.querySelector('select');
+      setSelect.call(frequency, 'daily');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      const location = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value.startsWith('campus:')),
+      );
+      setSelect.call(location, 'campus:thompson-library');
+      location.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await buildNow();
+    record('the series occurrence can be selected', (await selectSession('Series at Thompson')) === 'ok', '');
+    record(
+      'a series location is inherited by its occurrence',
+      (await whereName()).trim() === 'Thompson Library',
+      await whereName(),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    record('reset restores the default no-location choice', (await locationSelect()) === 'none', await locationSelect());
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {

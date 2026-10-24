@@ -1,6 +1,9 @@
 import type { TaskSeries } from '../features/recurring-tasks/index.ts';
 import { expandRecurrenceDates } from '../features/recurring-tasks/index.ts';
+import type { CampusLocation } from '../types.ts';
 import { MAX_DAY_COUNT } from './scheduleRange.ts';
+import { buildTaskLocation, defaultLocationDraft, draftFromLocation } from './taskLocationDraft.ts';
+import type { LocationDraft } from './taskLocationDraft.ts';
 
 /**
  * Pure draft/validation logic for the repeating-task form.
@@ -33,12 +36,14 @@ export interface SeriesDraft {
   endDate: string;
   priority: '' | 'low' | 'medium' | 'high';
   courseCode: string;
+  /** undefined semantics live in LocationDraft.choice === 'legacy'. */
+  location: LocationDraft;
 }
 
 export const MAX_SERIES_TITLE = 80;
 export const MAX_SERIES_DURATION = 600;
 
-export function emptyDraft(startDate: string): SeriesDraft {
+export function emptyDraft(startDate: string, locations: readonly CampusLocation[] = []): SeriesDraft {
   return {
     title: '',
     durationMinutes: 60,
@@ -49,6 +54,7 @@ export function emptyDraft(startDate: string): SeriesDraft {
     endDate: '',
     priority: '',
     courseCode: '',
+    location: defaultLocationDraft(locations),
   };
 }
 
@@ -60,7 +66,7 @@ function validDate(value: string): boolean {
 }
 
 /** Null when the draft can be saved, otherwise the message to show. */
-export function validateDraft(draft: SeriesDraft): string | null {
+export function validateDraft(draft: SeriesDraft, locations: readonly CampusLocation[] = []): string | null {
   const title = draft.title.trim();
   if (!title) return 'Give the repeating task a title.';
   if (title.length > MAX_SERIES_TITLE) return `Keep the title under ${MAX_SERIES_TITLE} characters.`;
@@ -84,11 +90,15 @@ export function validateDraft(draft: SeriesDraft): string | null {
     if (!validDate(draft.endDate)) return 'Pick a valid New York end date.';
     if (draft.endDate < draft.startDate) return 'The end date cannot be before the start date.';
   }
+  const located = buildTaskLocation(draft.location, locations);
+  if (!located.ok) return located.message;
   return null;
 }
 
 /** Builds the TaskSeries A's adapter expects. Never generates occurrences. */
-export function draftToSeries(draft: SeriesDraft, id: string): TaskSeries {
+export function draftToSeries(draft: SeriesDraft, id: string, locations: readonly CampusLocation[] = []): TaskSeries {
+  const located = buildTaskLocation(draft.location, locations);
+  if (!located.ok) throw new Error(located.message);
   const base = {
     id,
     title: draft.title.trim(),
@@ -97,6 +107,7 @@ export function draftToSeries(draft: SeriesDraft, id: string): TaskSeries {
     ...(draft.endDate ? { endDate: draft.endDate } : {}),
     ...(draft.priority ? { priority: draft.priority } : {}),
     ...(draft.courseCode.trim() ? { courseCode: draft.courseCode.trim() } : {}),
+    ...(located.location ? { location: located.location } : {}),
   } as const;
 
   if (draft.frequency === 'daily') {
@@ -116,7 +127,7 @@ export function draftToSeries(draft: SeriesDraft, id: string): TaskSeries {
   throw new Error('A never-repeating entry is a one-off task, not a series.');
 }
 
-export function seriesToDraft(series: TaskSeries): SeriesDraft {
+export function seriesToDraft(series: TaskSeries, locations: readonly CampusLocation[] = []): SeriesDraft {
   return {
     title: series.title,
     durationMinutes: series.durationMinutes,
@@ -127,6 +138,7 @@ export function seriesToDraft(series: TaskSeries): SeriesDraft {
     endDate: series.endDate ?? '',
     priority: series.priority ?? '',
     courseCode: series.courseCode ?? '',
+    location: draftFromLocation(series.location, locations),
   };
 }
 

@@ -10,6 +10,9 @@ import {
   resolveTaskInput,
 } from '../taskValidation.ts';
 import type { PendingChoice, TaskDraft } from '../taskValidation.ts';
+import { TaskLocationField } from './TaskLocationField.tsx';
+import { buildTaskLocation, defaultLocationDraft } from '../taskLocationDraft.ts';
+import type { LocationDraft } from '../taskLocationDraft.ts';
 
 export type { TaskDraft } from '../taskValidation.ts';
 
@@ -39,6 +42,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
   const [priority, setPriority] = useState('');
   const [courseCode, setCourseCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [locationDraft, setLocationDraft] = useState<LocationDraft>(() => defaultLocationDraft(request.locations));
   const fieldId = useId();
 
   const preview = parseCampusInput(due);
@@ -68,11 +72,18 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
       return;
     }
 
+    const located = buildTaskLocation(locationDraft, request.locations);
+    if (!located.ok) {
+      setError(located.message);
+      return;
+    }
+
     setError(null);
-    onAdd(result.draft);
+    onAdd({ ...result.draft, ...(located.location ? { location: located.location } : {}) });
     setTitle('');
     setCourseCode('');
     setChoice(null);
+    setLocationDraft(defaultLocationDraft(request.locations));
   }
 
   return (
@@ -174,6 +185,14 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
             {preview.message}
           </p>
         )}
+
+        <TaskLocationField
+          idPrefix={fieldId}
+          locations={request.locations}
+          draft={locationDraft}
+          onChange={setLocationDraft}
+          allowLegacy={false}
+        />
 
         {error && (
           <p className="cp-error" role="alert">
