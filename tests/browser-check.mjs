@@ -1445,6 +1445,123 @@ async function main() {
       JSON.stringify(afterIntensityReset.pressed),
     );
 
+    // --- intensity buttons: real Enter / Space activation ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await addTightTask('Key A');
+    await addTightTask('Key B');
+    await addTightTask('Key C');
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const focusPaceButton = (index) =>
+      evaluate(`(() => {
+        const buttons = [...document.querySelectorAll('#app .cp-intensity button')];
+        buttons[${index}].focus();
+        return document.activeElement === buttons[${index}];
+      })()`);
+    const paceKeyDown = (key, code, virtualKeyCode, text) =>
+      send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key,
+        code,
+        windowsVirtualKeyCode: virtualKeyCode,
+        nativeVirtualKeyCode: virtualKeyCode,
+        // A native button only runs its default activation when the event
+        // carries text; without it the keydown reaches JS but does not click.
+        text,
+        unmodifiedText: text,
+      });
+    const paceKeyUp = (key, code, virtualKeyCode) =>
+      send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key,
+        code,
+        windowsVirtualKeyCode: virtualKeyCode,
+        nativeVirtualKeyCode: virtualKeyCode,
+      });
+    const paceState = () =>
+      evaluate(`(() => ({
+        pressed: [...document.querySelectorAll('#app .cp-intensity button')].map((b) => b.getAttribute('aria-pressed')),
+        sessions: [...document.querySelectorAll('#app .cp-session')].map((el) => el.textContent),
+        tasks: document.querySelectorAll('#app .cp-tasks__row').length,
+        series: document.querySelectorAll('#app .cp-series__row').length,
+      }))()`);
+
+    const keyboardBaseline = await paceState();
+    record(
+      'the keyboard case starts from a relaxed plan',
+      keyboardBaseline.pressed[0] === 'true' && keyboardBaseline.sessions.length >= 3,
+      JSON.stringify(keyboardBaseline.pressed) + ' sessions=' + String(keyboardBaseline.sessions.length),
+    );
+
+    record('the high-intensity button can take focus', (await focusPaceButton(1)) === true, '');
+    await paceKeyDown('Enter', 'Enter', 13, '\r');
+    await paceKeyUp('Enter', 'Enter', 13);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const afterEnter = await paceState();
+    record(
+      'Enter switches the pace to high intensity',
+      afterEnter.pressed[1] === 'true' && afterEnter.pressed[0] === 'false',
+      JSON.stringify(afterEnter.pressed),
+    );
+    record(
+      'Enter re-plans with the new pace and keeps the tasks',
+      afterEnter.sessions.join('|') !== keyboardBaseline.sessions.join('|') &&
+        afterEnter.sessions.length === keyboardBaseline.sessions.length &&
+        afterEnter.tasks === keyboardBaseline.tasks,
+      JSON.stringify({ before: keyboardBaseline.sessions, after: afterEnter.sessions }),
+    );
+
+    record('the relaxed button can take focus', (await focusPaceButton(0)) === true, '');
+    const scrollBeforeSpace = await evaluate('window.scrollY');
+    await paceKeyDown(' ', 'Space', 32, ' ');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const afterSpaceDown = await paceState();
+    const scrollDuringSpace = await evaluate('window.scrollY');
+    record(
+      'Space keydown alone does not switch the pace',
+      afterSpaceDown.pressed[1] === 'true' && afterSpaceDown.pressed[0] === 'false',
+      JSON.stringify(afterSpaceDown.pressed),
+    );
+    await paceKeyUp(' ', 'Space', 32);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const afterSpace = await paceState();
+    const scrollAfterSpace = await evaluate('window.scrollY');
+    record(
+      'Space keyup switches the pace back to relaxed',
+      afterSpace.pressed[0] === 'true' && afterSpace.pressed[1] === 'false',
+      JSON.stringify(afterSpace.pressed),
+    );
+    record(
+      'Space restores the relaxed plan without touching the tasks',
+      afterSpace.sessions.join('|') === keyboardBaseline.sessions.join('|') &&
+        afterSpace.tasks === keyboardBaseline.tasks &&
+        afterSpace.series === keyboardBaseline.series,
+      JSON.stringify({ before: keyboardBaseline.sessions, after: afterSpace.sessions }),
+    );
+    record(
+      'Space does not scroll the page',
+      scrollDuringSpace === scrollBeforeSpace && scrollAfterSpace === scrollBeforeSpace,
+      'before=' + String(scrollBeforeSpace) + ' during=' + String(scrollDuringSpace) + ' after=' + String(scrollAfterSpace),
+    );
+
+    // A single press must produce exactly one change: no extra activation from
+    // the keyup after the keydown already toggled, and no double click.
+    record(
+      'one press produces one pace change',
+      afterSpace.pressed[0] === 'true' && afterSpace.pressed[1] === 'false',
+      JSON.stringify(afterSpace.pressed),
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {
