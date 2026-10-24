@@ -1,3 +1,4 @@
+import { normalizeTaskLocation } from '../task-locations/index.ts';
 import type { StudyTask } from '../../types.ts';
 import { calendarDate, validateDailyWindows } from '../multi-day-schedule/windows.ts';
 import type { DailyWindow } from '../multi-day-schedule/windows.ts';
@@ -17,6 +18,7 @@ export interface TaskSeries {
   rule: RecurrenceRule;
   priority?: StudyTask['priority'];
   courseCode?: string;
+  location?: StudyTask['location'];
 }
 export interface TaskOccurrence extends StudyTask {
   notBefore: string;
@@ -49,6 +51,7 @@ export function validateTaskSeries(series: TaskSeries): void {
   if (series.endDate !== undefined && calendarDate(series.endDate) < start) {
     throw new Error('Series end date cannot precede start date.');
   }
+  normalizeTaskLocation(series.location);
   validateRule(series.rule);
 }
 const DAY = 86_400_000;
@@ -86,6 +89,7 @@ export function generateOccurrences(seriesList: readonly TaskSeries[], windows: 
     validateTaskSeries(series);
     if (ids.has(series.id)) throw new Error('Series IDs must be unique.');
     ids.add(series.id);
+    const location = normalizeTaskLocation(series.location);
     for (const date of expandRecurrenceDates(series, dates)) {
       const window = byDate.get(date)!;
       occurrences.push({
@@ -96,6 +100,7 @@ export function generateOccurrences(seriesList: readonly TaskSeries[], windows: 
         notBefore: window.windowStart,
         seriesId: series.id,
         occurrenceDate: date,
+        ...(location !== undefined ? { location: { ...location } } : {}),
         ...(series.priority !== undefined ? { priority: series.priority } : {}),
         ...(series.courseCode !== undefined ? { courseCode: series.courseCode } : {}),
       });

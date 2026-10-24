@@ -2,6 +2,7 @@ import type { ScheduleRequest, StudyBlock } from '../../types.ts';
 import { formatDayShort, formatDuration, formatRangeDetailed } from '../format.ts';
 import { buildLocationPlan } from '../locationPlan.ts';
 import type { LocationPlanStatus } from '../locationPlan.ts';
+import { describeBlockLocation } from '../taskLocationDraft.ts';
 import { EmptyState } from './EmptyState.tsx';
 
 interface LocationCardProps {
@@ -46,8 +47,49 @@ export function LocationCard({ block, request }: LocationCardProps) {
     );
   }
 
-  const plan = buildLocationPlan(block, request);
   const minutes = (Date.parse(block.end) - Date.parse(block.start)) / 60_000;
+  const display = describeBlockLocation(block, request.locations);
+
+  // An explicit choice never falls back to a scheduler default, and a custom
+  // name is plain text the user typed, so neither goes through the availability
+  // helper at all.
+  if (display.kind !== 'legacy') {
+    const name =
+      display.kind === 'campus' ? display.name : display.kind === 'custom' ? display.name : 'No location set';
+    const status =
+      display.kind === 'campus'
+        ? 'Chosen for this task. Opening hours and room availability are not verified, and nothing is booked.'
+        : display.kind === 'custom'
+          ? 'Your own name for this task. It is not checked against campus data, opening hours or availability.'
+          : 'No location was chosen for this task, so none is assumed and no default is applied.';
+    return (
+      <section className="cp-panel" aria-labelledby="cp-location-heading-chosen">
+        <div className="cp-panel__head">
+          <h2 id="cp-location-heading-chosen">Where</h2>
+          <p className="cp-panel__meta">
+            {formatDayShort(block.start)} · {formatRangeDetailed(block.start, block.end, true)}
+          </p>
+        </div>
+
+        <p className="cp-location__name">{name}</p>
+        <p className="cp-location__task">
+          {block.title} · {formatDuration(minutes)}
+        </p>
+        <p className="cp-location__status">{status}</p>
+
+        <p className="cp-hint">
+          This is task metadata for your own plan. The recommendation panel lists places separately; those suggestions are
+          not the location chosen for this task.
+        </p>
+
+        <p className="cp-panel__foot">
+          This prototype does not verify room availability or travel time between sessions.
+        </p>
+      </section>
+    );
+  }
+
+  const plan = buildLocationPlan(block, request);
   const details = plan.scheduled?.details ?? null;
 
   const rows: { label: string; value: string }[] = [];

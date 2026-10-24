@@ -340,8 +340,13 @@ async function main() {
       '',
     );
     record(
-      'task form exposes optional priority and course code',
-      appText.includes('Priority (optional)') && appText.includes('Course code (optional)'),
+      'task form keeps optional priority and course code behind the disclosure',
+      await evaluate(`(() => {
+        const form = document.querySelector('#app form.cp-form');
+        if (!form || !form.querySelector('.cp-optional__toggle')) return false;
+        const text = form.textContent || '';
+        return text.includes('Priority (optional)') && text.includes('Course code (optional)');
+      })()`),
       '',
     );
 
@@ -1063,16 +1068,16 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 200));
     await clickButton('Repeating task');
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const afterSwitch = await modeState();
+    const afterTargetSwitch = await modeState();
     record(
       'switching shows the repeating pane',
-      afterSwitch.visible[0] === false && afterSwitch.visible[1] === true,
-      JSON.stringify(afterSwitch),
+      afterTargetSwitch.visible[0] === false && afterTargetSwitch.visible[1] === true,
+      JSON.stringify(afterTargetSwitch),
     );
     record(
       'an unsubmitted one-time draft survives a mode switch',
-      afterSwitch.title === 'Draft task',
-      String(afterSwitch.title),
+      afterTargetSwitch.title === 'Draft task',
+      String(afterTargetSwitch.title),
     );
 
     await evaluate(`(() => {
@@ -1560,6 +1565,668 @@ async function main() {
       'one press produces one pace change',
       afterSpace.pressed[0] === 'true' && afterSpace.pressed[1] === 'false',
       JSON.stringify(afterSpace.pressed),
+    );
+
+    // --- per-task locations ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const locationSelect = () =>
+      evaluate(`(() => {
+        const form = document.querySelector('#app form.cp-form');
+        const select = [...form.querySelectorAll('select')].find((item) =>
+          [...item.options].some((option) => option.value.startsWith('campus:')),
+        );
+        return select ? select.value : 'missing';
+      })()`);
+    const setLocationSelect = async (value) => {
+      await evaluate([
+        '(() => {',
+        "  const form = document.querySelector('#app form.cp-form');",
+        '  const select = [...form.querySelectorAll("select")].find((item) =>',
+        '    [...item.options].some((option) => option.value.startsWith("campus:")),',
+        '  );',
+        '  if (!select) return "missing";',
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;",
+        '  setter.call(select, ' + JSON.stringify(value) + ');',
+        "  select.dispatchEvent(new Event('change', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+    const addOneOff = async (title, customName) => {
+      await evaluate([
+        '(() => {',
+        "  const form = document.querySelector('#app form.cp-form');",
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        '  const titleInput = form.querySelector("input:not([type])");',
+        '  setter.call(titleInput, ' + JSON.stringify(title) + ');',
+        "  titleInput.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  const due = form.querySelector("input[type=\\"datetime-local\\"]");',
+        "  setter.call(due, '2026-10-20T17:00');",
+        "  due.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  const custom = form.querySelector("input[id$=\\"-location-custom\\"]");',
+        '  const customName = ' + JSON.stringify(customName ?? '') + ';',
+        '  if (custom && customName) {',
+        '    setter.call(custom, customName);',
+        "    custom.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  }',
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await clickButton('Add task');
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const buildNow = async () => {
+      await evaluate(`(() => {
+        const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+        if (!button) return 'missing';
+        button.click();
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    };
+    const selectSession = async (title) => {
+      const result = await evaluate([
+        '(() => {',
+        '  const item = [...document.querySelectorAll("#app .cp-session")].find((el) =>',
+        '    el.textContent.includes(' + JSON.stringify(title) + '),',
+        '  );',
+        '  if (!item) return "missing";',
+        '  item.click();',
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return result;
+    };
+    const whereName = () => evaluate(`((document.querySelector('#app .cp-location__name') || {}).textContent || '')`);
+    const whereStatus = () => evaluate(`((document.querySelector('#app .cp-location__status') || {}).textContent || '')`);
+
+    record('a new task defaults to no location', (await locationSelect()) === 'none', '');
+    await addOneOff('Task without place');
+    await buildNow();
+    record('the no-location task can be selected', (await selectSession('Task without place')) === 'ok', '');
+    record(
+      'a task with no location still schedules and assumes nothing',
+      (await whereName()).trim() === 'No location set' && /no default is applied/i.test(await whereStatus()),
+      (await whereName()) + ' | ' + (await whereStatus()),
+    );
+
+    await setLocationSelect('campus:ohio-union');
+    await addOneOff('Task at the union');
+    await buildNow();
+    record('the campus task can be selected', (await selectSession('Task at the union')) === 'ok', '');
+    record('a campus choice is shown in Where', (await whereName()).trim() === 'Ohio Union', await whereName());
+
+    await setLocationSelect('other');
+    await addOneOff('Task at my desk', 'My desk');
+    await buildNow();
+    record('the custom task can be selected', (await selectSession('Task at my desk')) === 'ok', '');
+    record(
+      'a custom name is shown as plain task text',
+      (await whereName()).trim() === 'My desk' && /not checked against campus data/i.test(await whereStatus()),
+      (await whereName()) + ' | ' + (await whereStatus()),
+    );
+
+    // A series keeps its location and its occurrences inherit it.
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Series at Thompson');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const frequency = form.querySelector('select');
+      setSelect.call(frequency, 'daily');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      const location = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value.startsWith('campus:')),
+      );
+      setSelect.call(location, 'campus:thompson-library');
+      location.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await buildNow();
+    record('the series occurrence can be selected', (await selectSession('Series at Thompson')) === 'ok', '');
+    record(
+      'a series location is inherited by its occurrence',
+      (await whereName()).trim() === 'Thompson Library',
+      await whereName(),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    record('reset restores the default no-location choice', (await locationSelect()) === 'none', await locationSelect());
+
+    // --- optional details disclosure ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const optionalState = () =>
+      evaluate(`(() => {
+        const toggle = document.querySelector('#app form.cp-form .cp-optional__toggle');
+        const panel = document.querySelector('#app form.cp-form .cp-optional__panel');
+        if (!toggle || !panel) return null;
+        const custom = panel.querySelector('input[id$="-location-custom"]');
+        return {
+          expanded: toggle.getAttribute('aria-expanded'),
+          hidden: panel.hasAttribute('hidden'),
+          summary: ((toggle.querySelector('.cp-optional__summary') || {}).textContent) || '',
+          customVisible: !!custom && !custom.closest('[hidden]'),
+        };
+      })()`);
+
+    const collapsed = await optionalState();
+    record(
+      'optional details start collapsed with a location summary',
+      collapsed.expanded === 'false' &&
+        collapsed.hidden === true &&
+        collapsed.summary.trim() === 'Location: Not set' &&
+        collapsed.customVisible === false,
+      JSON.stringify(collapsed),
+    );
+
+    await evaluate("document.querySelector('#app form.cp-form .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const expanded = await optionalState();
+    record(
+      'clicking optional details reveals the fields',
+      expanded.expanded === 'true' && expanded.hidden === false,
+      JSON.stringify(expanded),
+    );
+
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'campus:ohio-union'),
+      );
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'campus:ohio-union');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const campusSummary = await optionalState();
+    record(
+      'the summary shows the chosen campus place',
+      campusSummary.summary.trim() === 'Location: Ohio Union',
+      JSON.stringify(campusSummary),
+    );
+
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'other'),
+      );
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'other');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const customState = await optionalState();
+    record(
+      'the custom name field appears only for Other',
+      customState.customVisible === true && customState.summary.trim() === 'Location: Not set',
+      JSON.stringify(customState),
+    );
+
+    // Switching the task mode must keep the disclosure open and keep the draft.
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const afterMode = await optionalState();
+    record(
+      'a mode switch keeps the disclosure and the draft',
+      afterMode.expanded === 'true' && afterMode.customVisible === true,
+      JSON.stringify(afterMode),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const afterDisclosureReset = await optionalState();
+    record(
+      'reset collapses the disclosure and clears the location',
+      afterDisclosureReset.expanded === 'false' &&
+        afterDisclosureReset.hidden === true &&
+        afterDisclosureReset.summary.trim() === 'Location: Not set' &&
+        afterDisclosureReset.customVisible === false,
+      JSON.stringify(afterDisclosureReset),
+    );
+
+    // --- D QA: Never keeps the location ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Never keeps place');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      const frequency = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'daily'),
+      );
+      setSelect.call(frequency, 'never');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      const toggle = form.querySelector('.cp-optional__toggle');
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      const location = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'campus:ohio-union'),
+      );
+      setSelect.call(location, 'campus:ohio-union');
+      location.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+      if (button) button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await evaluate(`(() => {
+      const item = [...document.querySelectorAll('#app .cp-session')].find((el) => el.textContent.includes('Never keeps place'));
+      if (item) item.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const neverWhere = await evaluate(`((document.querySelector('#app .cp-location__name') || {}).textContent || '').trim()`);
+    record('Never keeps the chosen campus location', neverWhere === 'Ohio Union', neverWhere);
+
+    // --- D QA: a submit error is visible while optional details stay collapsed ---
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate("document.querySelector('#app form.cp-form .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await evaluate("document.querySelector('#app form.cp-form .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const errorState = await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const error = form.querySelector('.cp-error');
+      const panel = form.querySelector('.cp-optional__panel');
+      const box = error ? error.getBoundingClientRect() : null;
+      const toggle = form.querySelector('.cp-optional__toggle');
+      return {
+        text: error ? error.textContent.trim() : '',
+        height: box ? box.height : 0,
+        insideHiddenPanel: panel ? panel.contains(error) : false,
+        expanded: toggle ? toggle.getAttribute('aria-expanded') : null,
+      };
+    })()`);
+    record(
+      'a submit error stays visible outside the collapsed details',
+      errorState.text.length > 0 && errorState.height > 0 && errorState.insideHiddenPanel === false,
+      JSON.stringify(errorState),
+    );
+
+    // --- D QA: a long custom name must not widen the page ---
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const toggle = form.querySelector('.cp-optional__toggle');
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'other'),
+      );
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setSelect.call(select, 'other');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const input = form.querySelector('input[id$="-location-custom"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'x'.repeat(120));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate("document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"] .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const narrow = await evaluate(`(() => {
+        const summary = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"] .cp-optional__summary');
+        return {
+          summary: summary ? summary.textContent.trim() : '',
+          title: summary ? summary.getAttribute('title') : '',
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+      record(
+        `a 120-character location summary fits a ${width}px viewport`,
+        narrow.overflow <= 1 && narrow.summary.replace('Location: ', '').length > 0 && narrow.title.length >= narrow.summary.length,
+        JSON.stringify({ ...narrow, summary: narrow.summary.slice(0, 24), title: narrow.title.slice(0, 24) }),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // --- D QA: submit errors are associated with their inputs ---
+    const axDescriptionOf = async (selector) => {
+      const object = await send('Runtime.evaluate', {
+        expression: `document.querySelector(${JSON.stringify(selector)})`,
+        returnByValue: false,
+      });
+      if (!object.result || !object.result.result || !object.result.result.objectId) return '';
+      const tree = await send('Accessibility.getPartialAXTree', {
+        objectId: object.result.result.objectId,
+        fetchRelatives: false,
+      });
+      const node = tree.result && tree.result.nodes ? tree.result.nodes[0] : null;
+      return node && node.description ? node.description.value : '';
+    };
+    const errorFacts = (inputSelector) =>
+      evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(inputSelector)});
+        if (!input) return null;
+        const describedBy = input.getAttribute('aria-describedby');
+        const target = describedBy ? document.getElementById(describedBy) : null;
+        const box = target ? target.getBoundingClientRect() : null;
+        return {
+          invalid: input.getAttribute('aria-invalid'),
+          describedBy,
+          targetText: target ? target.textContent.trim() : '',
+          targetVisible: !!box && box.height > 0,
+        };
+      })()`);
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const oneOffTitleFacts = await errorFacts('#app form.cp-form input:not([type])');
+    const oneOffTitleAx = await axDescriptionOf('#app form.cp-form input:not([type])');
+    record(
+      'an empty one-off title is tied to its error',
+      oneOffTitleFacts.invalid === 'true' &&
+        oneOffTitleFacts.describedBy &&
+        oneOffTitleFacts.targetText.length > 0 &&
+        oneOffTitleFacts.targetVisible &&
+        oneOffTitleAx.includes(oneOffTitleFacts.targetText),
+      JSON.stringify({ ...oneOffTitleFacts, ax: oneOffTitleAx }),
+    );
+
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const input = form.querySelector('input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Now has a title');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const clearedTitle = await errorFacts('#app form.cp-form input:not([type])');
+    record(
+      'editing the title clears the error state',
+      clearedTitle.invalid === 'false' && !clearedTitle.describedBy && clearedTitle.targetText === '',
+      JSON.stringify(clearedTitle),
+    );
+
+    // One-off, Other with a blank name.
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const toggle = form.querySelector('.cp-optional__toggle');
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'other'),
+      );
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'other');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const oneOffCustomFacts = await errorFacts('#app form.cp-form input[id$="-location-custom"]');
+    const oneOffCustomAx = await axDescriptionOf('#app form.cp-form input[id$="-location-custom"]');
+    record(
+      'a blank one-off custom name is tied to its error',
+      oneOffCustomFacts.invalid === 'true' &&
+        oneOffCustomFacts.describedBy &&
+        /name/i.test(oneOffCustomFacts.targetText) &&
+        oneOffCustomFacts.targetVisible &&
+        oneOffCustomAx.includes(oneOffCustomFacts.targetText),
+      JSON.stringify({ ...oneOffCustomFacts, ax: oneOffCustomAx }),
+    );
+
+    // Repeating: empty title.
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const title = section.querySelector('form.cp-form input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(title, '');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const seriesTitleFacts = await errorFacts('#app section[aria-labelledby="cp-recurring-heading"] form.cp-form input:not([type])');
+    const seriesTitleAx = await axDescriptionOf(
+      '#app section[aria-labelledby="cp-recurring-heading"] form.cp-form input:not([type])',
+    );
+    record(
+      'an empty series title is tied to its error',
+      seriesTitleFacts.invalid === 'true' &&
+        seriesTitleFacts.describedBy &&
+        seriesTitleFacts.targetText.length > 0 &&
+        seriesTitleFacts.targetVisible &&
+        seriesTitleAx.includes(seriesTitleFacts.targetText),
+      JSON.stringify({ ...seriesTitleFacts, ax: seriesTitleAx }),
+    );
+
+    // Repeating: Other with a blank name is covered by the pure validator
+    // (tests/task-location-ui.test.ts) and by the same TaskLocationField code
+    // path already asserted for the one-off form above.
+    record(
+      'the two forms never share an error id',
+      await evaluate(`(() => {
+        const ids = [...document.querySelectorAll('#app .cp-error[id]')].map((el) => el.id);
+        return new Set(ids).size === ids.length;
+      })()`),
+      '',
+    );
+
+    // --- D QA: the repeating form clears stale error state ---
+    const qaSeriesPanel = '#app section[aria-labelledby="cp-recurring-heading"]';
+    const qaSeriesTitle = `${qaSeriesPanel} form.cp-form input:not([type])`;
+    const qaSeriesFacts = () =>
+      evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(qaSeriesTitle)});
+        const error = document.querySelector('${qaSeriesPanel} form.cp-form .cp-error');
+        return {
+          invalid: input ? input.getAttribute('aria-invalid') : null,
+          describedBy: input ? input.getAttribute('aria-describedby') : null,
+          errorText: error ? error.textContent.trim() : '',
+          editing: !!(document.querySelector('${qaSeriesPanel}') || {}).textContent?.includes('Save changes'),
+        };
+      })()`);
+    const qaAddSeries = async (title) => {
+      await evaluate([
+        '(() => {',
+        `  const section = document.querySelector('${qaSeriesPanel}');`,
+        '  const form = section.querySelector("form.cp-form");',
+        '  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;',
+        '  const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;',
+        '  const input = form.querySelector("input:not([type])");',
+        '  setter.call(input, ' + JSON.stringify(title) + ');',
+        "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  const frequency = [...form.querySelectorAll("select")].find((item) =>',
+        '    [...item.options].some((option) => option.value === "daily"),',
+        '  );',
+        '  setSelect.call(frequency, "daily");',
+        "  frequency.dispatchEvent(new Event('change', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await clickButton('Add repeating task');
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const qaStartEdit = async (title) => {
+      await evaluate([
+        '(() => {',
+        `  const section = document.querySelector('${qaSeriesPanel}');`,
+        '  const row = [...section.querySelectorAll(".cp-series__row")].find((el) =>',
+        '    el.textContent.includes(' + JSON.stringify(title) + '),',
+        '  );',
+        '  if (!row) return "missing";',
+        '  const edit = [...row.querySelectorAll("button")].find((b) => b.textContent.includes("Edit"));',
+        '  if (!edit) return "missing";',
+        '  edit.click();',
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    };
+    const qaClearTitle = async () => {
+      await evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(qaSeriesTitle)});
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+    const qaSubmitSeries = async () => {
+      await evaluate(`(() => {
+        const form = document.querySelector('${qaSeriesPanel} form.cp-form');
+        if (!form) return 'missing';
+        form.requestSubmit();
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const qaRaiseSeriesError = async () => {
+      await qaClearTitle();
+      await qaSubmitSeries();
+      return qaSeriesFacts();
+    };
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await qaAddSeries('Alpha');
+    await qaAddSeries('Beta');
+    await qaAddSeries('Gamma');
+
+    // Cancel
+    await qaStartEdit('Alpha');
+    const cancelRaised = await qaRaiseSeriesError();
+    await evaluate(`[...document.querySelectorAll('${qaSeriesPanel} button')].find((b) => b.textContent.includes('Cancel')).click()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const qaStaleAfterCancel = await qaSeriesFacts();
+    record(
+      'Cancel clears the failing edit state',
+      cancelRaised.invalid === 'true' && qaStaleAfterCancel.invalid !== 'true' && !qaStaleAfterCancel.describedBy && qaStaleAfterCancel.errorText === '',
+      JSON.stringify({ raised: cancelRaised.invalid, after: qaStaleAfterCancel }),
+    );
+
+    // Delete the series being edited
+    await qaStartEdit('Alpha');
+    const deleteRaised = await qaRaiseSeriesError();
+    await evaluate(`(() => {
+      const section = document.querySelector('${qaSeriesPanel}');
+      const row = [...section.querySelectorAll('.cp-series__row')].find((el) => el.textContent.includes('Alpha'));
+      if (!row) return 'missing';
+      const remove = [...row.querySelectorAll('button')].find((b) => b.textContent.includes('Delete'));
+      if (!remove) return 'missing';
+      remove.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const qaStaleAfterDelete = await qaSeriesFacts();
+    record(
+      'deleting the edited series clears the failing state',
+      deleteRaised.invalid === 'true' && qaStaleAfterDelete.invalid !== 'true' && !qaStaleAfterDelete.describedBy && qaStaleAfterDelete.errorText === '',
+      JSON.stringify({ raised: deleteRaised.invalid, after: qaStaleAfterDelete }),
+    );
+
+    // Switch the edit target while an error is showing
+    await qaStartEdit('Beta');
+    const switchRaised = await qaRaiseSeriesError();
+    await qaStartEdit('Gamma');
+    const qaStaleAfterSwitch = await qaSeriesFacts();
+    record(
+      'switching the edit target clears the failing state',
+      switchRaised.invalid === 'true' && qaStaleAfterSwitch.invalid !== 'true' && !qaStaleAfterSwitch.describedBy && qaStaleAfterSwitch.errorText === '',
+      JSON.stringify({ raised: switchRaised.invalid, after: qaStaleAfterSwitch }),
+    );
+
+    // Fixing the input and submitting again
+    await qaStartEdit('Beta');
+    await qaRaiseSeriesError();
+    await evaluate(`(() => {
+      const input = document.querySelector(${JSON.stringify(qaSeriesTitle)});
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Beta renamed');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const fixedBeforeSubmit = await qaSeriesFacts();
+    await qaSubmitSeries();
+    const qaStaleAfterFix = await qaSeriesFacts();
+    record(
+      'fixing the input clears the association before and after saving',
+      fixedBeforeSubmit.invalid !== 'true' &&
+        !fixedBeforeSubmit.describedBy &&
+        qaStaleAfterFix.invalid !== 'true' &&
+        !qaStaleAfterFix.describedBy &&
+        qaStaleAfterFix.errorText === '',
+      JSON.stringify({ before: fixedBeforeSubmit, after: qaStaleAfterFix }),
     );
 
     // --- campus map ---

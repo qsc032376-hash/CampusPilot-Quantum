@@ -1,4 +1,4 @@
-import type { StudyTask } from '../types.ts';
+import type { StudyTask, TaskLocation } from '../types.ts';
 import { parseCampusInput } from './format.ts';
 
 export type TaskPriority = NonNullable<StudyTask['priority']>;
@@ -10,6 +10,8 @@ export interface TaskDraft {
   /** Optional display metadata; never affects scheduling order. */
   priority?: TaskPriority;
   courseCode?: string;
+  /** Explicit task location; undefined is reserved for legacy data only. */
+  location?: TaskLocation;
 }
 
 /** A repeat-hour pick, remembered together with the input it was made for. */

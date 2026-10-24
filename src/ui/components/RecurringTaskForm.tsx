@@ -14,6 +14,11 @@ import {
   validateDraft,
 } from '../recurring.ts';
 import type { SeriesDraft } from '../recurring.ts';
+import type { CampusLocation } from '../../types.ts';
+import { TaskLocationField } from './TaskLocationField.tsx';
+import { OptionalDetails } from './OptionalDetails.tsx';
+import { buildTaskLocation, locationSummary } from '../taskLocationDraft.ts';
+import type { TaskLocation } from '../../types.ts';
 
 export interface OneOffFromSeries {
   title: string;
@@ -21,10 +26,14 @@ export interface OneOffFromSeries {
   dueAt: string;
   priority?: 'low' | 'medium' | 'high';
   courseCode?: string;
+  /** Explicit location carried over from the repeating draft; undefined only for legacy. */
+  location?: TaskLocation;
 }
 
 interface RecurringTaskFormProps {
   series: readonly TaskSeries[];
+  /** Campus catalog used for the per-series location choice. */
+  locations: readonly CampusLocation[];
   /** Calendar dates of the current range, used only to count occurrences. */
   dates: readonly string[];
   defaultStartDate: string;
@@ -51,6 +60,7 @@ function makeSeriesId(): string {
  */
 export function RecurringTaskForm({
   series,
+  locations,
   dates,
   defaultStartDate,
   rangeStart,
@@ -61,10 +71,15 @@ export function RecurringTaskForm({
   onDeleteSeries,
   onAddOneOff,
 }: RecurringTaskFormProps) {
-  const [draft, setDraft] = useState<SeriesDraft>(() => emptyDraft(defaultStartDate));
+  const [draft, setDraft] = useState<SeriesDraft>(() => emptyDraft(defaultStartDate, locations));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startTouched, setStartTouched] = useState(false);
+  /** Editing a series whose location is undefined keeps that legacy choice until changed. */
+  const [legacyEditing, setLegacyEditing] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  /** Which field the current error belongs to, so it can be associated with that input. */
+  const [errorField, setErrorField] = useState<'title' | 'location' | null>(null);
   const fieldId = useId();
 
   // The start date follows the viewed day until the user edits it or opens a
@@ -79,10 +94,12 @@ export function RecurringTaskForm({
   }
 
   function resetDraft() {
-    setDraft(emptyDraft(defaultStartDate));
+    setDraft(emptyDraft(defaultStartDate, locations));
     setEditingId(null);
     setError(null);
+    setErrorField(null);
     setStartTouched(false);
+    setLegacyEditing(false);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -97,9 +114,10 @@ export function RecurringTaskForm({
       );
       return;
     }
-    const message = validateDraft(draft);
+    const message = validateDraft(draft, locations);
     if (message) {
       setError(message);
+      setErrorField(/title/i.test(message) ? 'title' : /name/i.test(message) ? 'location' : null);
       return;
     }
 
@@ -118,19 +136,25 @@ export function RecurringTaskForm({
         setError('That day has no study window in the selected range.');
         return;
       }
+      const located = buildTaskLocation(draft.location, locations);
+      if (!located.ok) {
+        setError(located.message);
+        return;
+      }
       onAddOneOff({
         title: draft.title.trim(),
         durationMinutes: draft.durationMinutes,
         dueAt,
         ...(draft.priority ? { priority: draft.priority } : {}),
         ...(draft.courseCode.trim() ? { courseCode: draft.courseCode.trim() } : {}),
+        ...(located.location ? { location: located.location } : {}),
       });
       resetDraft();
       return;
     }
 
     const id = editingId ?? makeSeriesId();
-    const built = draftToSeries(draft, id);
+    const built = draftToSeries(draft, id, locations);
     if (editingId) onUpdateSeries(built);
     else onAddSeries(built);
     resetDraft();
@@ -143,10 +167,13 @@ export function RecurringTaskForm({
   }
 
   function startEdit(item: TaskSeries) {
-    setDraft(seriesToDraft(item));
+    setDraft(seriesToDraft(item, locations));
     setEditingId(item.id);
     setError(null);
+    setErrorField(null);
     setStartTouched(true);
+    // An undefined location stays undefined unless the user picks a new value.
+    setLegacyEditing(item.location === undefined);
   }
 
   function toggleWeekday(day: number) {
@@ -175,13 +202,22 @@ export function RecurringTaskForm({
             id={`${fieldId}-title`}
             className="cp-input"
             value={draft.title}
+            aria-invalid={errorField === 'title'}
+            aria-describedby={errorField === 'title' ? `${fieldId}-error` : undefined}
             maxLength={MAX_SERIES_TITLE + 20}
             autoComplete="off"
-            onChange={(event) => patch({ title: event.target.value })}
+            onChange={(event) => {
+              patch({ title: event.target.value });
+              setError(null);
+              setErrorField(null);
+            }}
           />
         </label>
 
-        <div className="cp-field-row cp-field-row--split">
+        <h4 id={`${fieldId}-pattern`} className="cp-subhead">
+          Repeating pattern
+        </h4>
+        <div className="cp-field-row cp-field-row--split" role="group" aria-labelledby={`${fieldId}-pattern`}>
           <label className="cp-field" htmlFor={`${fieldId}-minutes`}>
             <span className="cp-field__label">Minutes</span>
             <input
@@ -279,8 +315,13 @@ export function RecurringTaskForm({
           </label>
         </div>
 
-        <div className="cp-field-row cp-field-row--split">
-          <label className="cp-field" htmlFor={`${fieldId}-priority`}>
+        <OptionalDetails
+          summary={locationSummary(draft.location, locations)}
+          open={detailsOpen || error !== null}
+          onOpenChange={setDetailsOpen}
+        >
+          <div className="cp-field-row cp-field-row--split">
+            <label className="cp-field" htmlFor={`${fieldId}-priority`}>
             <span className="cp-field__label">Priority (optional)</span>
             <select
               id={`${fieldId}-priority`}
@@ -314,10 +355,25 @@ export function RecurringTaskForm({
         </p>
 
         {error && (
-          <p className="cp-error" role="alert">
+          <p className="cp-error" role="alert" id={`${fieldId}-error`}>
             {error}
           </p>
         )}
+
+        <TaskLocationField
+          idPrefix={fieldId}
+          locations={locations}
+          draft={draft.location}
+          onChange={(next) => {
+            patch({ location: next });
+            setError(null);
+            setErrorField(null);
+          }}
+          allowLegacy={editingId !== null && legacyEditing}
+          describedBy={errorField === 'location' ? `${fieldId}-error` : undefined}
+          invalid={errorField === 'location'}
+        />
+        </OptionalDetails>
 
         <div className="cp-form__actions">
           <button type="submit" className="cp-button">

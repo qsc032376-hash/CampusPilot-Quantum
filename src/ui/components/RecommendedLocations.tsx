@@ -119,7 +119,10 @@ export function RecommendedLocations({ block, request }: RecommendedLocationsPro
         <p className="cp-hint">This block does not have a valid start and end time, so no location list is shown.</p>
       )}
 
-      <p className="cp-panel__foot">{LOCATION_AVAILABILITY_NOTE} Official pages are linked; nothing is booked here.</p>
+      <p className="cp-panel__foot">
+        These are suggestions for open places, not the location assigned to the task. {LOCATION_AVAILABILITY_NOTE} Official
+        pages are linked; nothing is booked here.
+      </p>
     </section>
   );
 }
