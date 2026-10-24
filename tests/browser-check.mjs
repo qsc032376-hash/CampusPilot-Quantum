@@ -1939,6 +1939,46 @@ async function main() {
     await evaluate("document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"] .cp-optional__toggle').click()");
     await new Promise((resolve) => setTimeout(resolve, 250));
 
+    // The long custom name must not widen the page and must stay readable.
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const longName = await evaluate(`(() => {
+        const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+        const row = section.querySelector('.cp-optional__row');
+        const toggle = section.querySelector('.cp-optional__toggle');
+        const summary = section.querySelector('.cp-optional__summary');
+        const panel = section.querySelector('.cp-optional__panel');
+        const box = summary ? summary.getBoundingClientRect() : null;
+        return {
+          width: window.innerWidth,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          expanded: toggle ? toggle.getAttribute('aria-expanded') : null,
+          panelHidden: panel ? panel.hasAttribute('hidden') : null,
+          summary: summary ? summary.textContent.trim() : '',
+          title: summary ? summary.getAttribute('title') : '',
+          summaryWidth: box ? Math.round(box.width) : 0,
+          rowWidth: row ? Math.round(row.getBoundingClientRect().width) : 0,
+        };
+      })()`);
+      record(
+        `a 120-character place name keeps the repeating summary compact at ${width}px`,
+        longName.width === width &&
+          longName.clientWidth === width &&
+          longName.scrollWidth === width &&
+          longName.expanded === 'false' &&
+          longName.panelHidden === true &&
+          longName.summary === 'Custom location set' &&
+          longName.title.length === 120 &&
+          longName.summaryWidth > 0 &&
+          longName.summaryWidth <= longName.rowWidth,
+        JSON.stringify({ ...longName, title: longName.title.slice(0, 8) + '…(' + longName.title.length + ')' }),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
     for (const width of [320, 375]) {
       await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
       await new Promise((resolve) => setTimeout(resolve, 300));
