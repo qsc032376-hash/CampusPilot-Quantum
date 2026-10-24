@@ -2979,6 +2979,17 @@ async function main() {
       JSON.stringify(welcome),
     );
 
+    const wideCard = await evaluate(`(() => {
+      const card = document.querySelector('#app .cp-tour__card');
+      const box = card.getBoundingClientRect();
+      return { width: Math.round(box.width), center: Math.round(box.left + box.width / 2), clientWidth: document.documentElement.clientWidth };
+    })()`);
+    record(
+      'the welcome card is a centred column on a wide screen',
+      wideCard.width <= 400 && wideCard.width >= 300 && Math.abs(wideCard.center - wideCard.clientWidth / 2) <= 10,
+      JSON.stringify(wideCard),
+    );
+
     await tourKey('ArrowRight', 'ArrowRight', 39);
     const taskStep = await tourState();
     record(
@@ -3103,6 +3114,39 @@ async function main() {
         };
       })()`);
 
+    await evaluate("document.querySelector('#app .cp-tour__back').click()");
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const afterBack = await tourState();
+    record(
+      'going back from the results stays on the build step',
+      afterBack !== null && /6 of 11/.test(afterBack.progress),
+      JSON.stringify(afterBack && { progress: afterBack.progress }),
+    );
+
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
+      if (button) { button.focus(); button.click(); }
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await advanceTour(5);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const replayAtBuild = await tourState();
+    record(
+      'replaying with an existing plan does not skip the build step',
+      replayAtBuild !== null && /6 of 11/.test(replayAtBuild.progress),
+      JSON.stringify(replayAtBuild && { progress: replayAtBuild.progress }),
+    );
+
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const afterRebuild = await tourState();
+    record(
+      'a build pressed while on the step advances to the results',
+      afterRebuild !== null && /7 of 11/.test(afterRebuild.progress),
+      JSON.stringify(afterRebuild && { progress: afterRebuild.progress }),
+    );
+
     await advanceTour(1);
     const whereStep = await tourState();
     const whereEmpty = await evaluate("document.querySelector('#app .cp-tour__body').textContent");
@@ -3120,6 +3164,13 @@ async function main() {
       const heading = card ? card.innerText : '';
       return { body, headingHasWhere: /Where/.test(heading), headingHasRec: /Recommended study locations/.test(heading) };
     })()`);
+    const recommendationCopy = await evaluate("(() => { const panel = document.querySelector('#app [data-tour=\"where\"]'); return panel ? panel.innerText : ''; })()");
+    record(
+      'recommendations describe a simulated block time, not live availability',
+      /recommended for this simulated block time/.test(recommendationCopy) && !/listed as open/i.test(recommendationCopy),
+      JSON.stringify({ text: recommendationCopy.slice(0, 80) }),
+    );
+
     record(
       'the where step follows a real selection',
       whereFilled.headingHasWhere && whereFilled.headingHasRec && !/No block is selected yet/.test(whereFilled.body),
@@ -3178,6 +3229,23 @@ async function main() {
       finished.tour === false && finished.stored === 'done',
       JSON.stringify(finished),
     );
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
+      if (button) { button.focus(); button.click(); }
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    const replayWipe = await evaluate(`(() => ({
+      wipes: document.querySelectorAll('#app .cp-tour__wipe').length,
+      progress: ((document.querySelector('#app .cp-tour__progress') || {}).textContent || '').trim(),
+    }))()`);
+    record(
+      'replaying the tour does not replay the chapter wipe',
+      replayWipe.wipes === 0 && /1 of 11/.test(replayWipe.progress),
+      JSON.stringify(replayWipe),
+    );
+    await tourKey('Escape', 'Escape', 27);
+
     await send('Page.reload', {});
     await new Promise((resolve) => setTimeout(resolve, 1100));
     record('a finished tour does not reopen on refresh', (await tourState()) === null, '');
@@ -3242,6 +3310,17 @@ async function main() {
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     await reloadTour(null);
     const reducedState = await tourState();
+    const maskStyle = await evaluate(`(() => {
+      const mask = document.querySelector('#app .cp-tour__mask');
+      if (!mask) return null;
+      const style = getComputedStyle(mask);
+      return { animationName: style.animationName, background: style.backgroundColor };
+    })()`);
+    record(
+      'reduced motion disables the mask fade',
+      maskStyle !== null && maskStyle.animationName === 'none',
+      JSON.stringify(maskStyle),
+    );
     record(
       'reduced motion keeps the tour and marks it as still',
       reducedState !== null && reducedState.reduced === true && /1 of 11/.test(reducedState.progress),

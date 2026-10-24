@@ -279,7 +279,7 @@ const manyHtml = renderToStaticMarkup(
 );
 check(
   'several locations are listed for an afternoon block',
-  manyHtml.includes('5 places are listed as open') &&
+  manyHtml.includes('5 places are recommended for this simulated block time') &&
     manyHtml.includes('18th Avenue Library') &&
     manyHtml.includes('Ohio Union'),
   '',
@@ -305,7 +305,7 @@ const oneHtml = renderToStaticMarkup(
 );
 check(
   'exactly one location renders a count of one',
-  oneHtml.includes('1 place is listed as open') && oneHtml.includes('18th Avenue Library'),
+  oneHtml.includes('1 place is recommended for this simulated block time') && oneHtml.includes('18th Avenue Library'),
   '',
 );
 

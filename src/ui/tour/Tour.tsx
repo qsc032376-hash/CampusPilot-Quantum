@@ -45,6 +45,8 @@ function resolve(step: TourStep): Element | null {
 interface TourProps {
   /** True once a real plan exists; the build step waits for it. */
   hasPlan: boolean;
+  /** Successful planner runs; the build step advances only when this grows. */
+  planRuns: number;
   /** True when a study block is really selected; the Where step depends on it. */
   hasSelection: boolean;
   /** Increment to replay the tour from the start. */
@@ -58,7 +60,7 @@ interface TourProps {
  * submits the task form and never touches plan data. Completing or skipping is
  * stored locally so a refresh does not force the tour again.
  */
-export function Tour({ hasPlan, hasSelection, replayKey }: TourProps) {
+export function Tour({ hasPlan, planRuns, hasSelection, replayKey }: TourProps) {
   const [index, setIndex] = useState(-1);
   const [rect, setRect] = useState<Rect | null>(null);
   const [reduced, setReduced] = useState(false);
@@ -68,6 +70,8 @@ export function Tour({ hasPlan, hasSelection, replayKey }: TourProps) {
   const stepRef = useRef<HTMLDivElement | null>(null);
   const lastChapter = useRef<TourStep['chapter'] | null>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
+  /** Planner-run count captured when the Build step became current. */
+  const planOnEntry = useRef<number | null>(null);
 
   const step: TourStep | null = index >= 0 ? TOUR_STEPS[index] ?? null : null;
 
@@ -83,6 +87,10 @@ export function Tour({ hasPlan, hasSelection, replayKey }: TourProps) {
   useEffect(() => {
     if (replayKey > 0) {
       returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      // A replay starts a fresh run: no leftover chapter wipe.
+      lastChapter.current = null;
+      setWipe(0);
+      setCelebrate(0);
       setIndex(0);
     }
   }, [replayKey]);
@@ -216,13 +224,25 @@ export function Tour({ hasPlan, hasSelection, replayKey }: TourProps) {
     [finish, hasPlan],
   );
 
-  // A real plan unlocks the build step; nothing is built by the tour itself.
+  // Remember the run count when the Build step becomes current, so returning to
+  // it (Back, Replay) never counts an older plan as a fresh build.
   useEffect(() => {
-    if (step?.waitsForPlan && hasPlan) {
+    if (step?.waitsForPlan) planOnEntry.current = planRuns;
+  }, [step?.id]);
+
+  // Advance only when a build really ran while this step was on screen.
+  useEffect(() => {
+    if (!step?.waitsForPlan) return;
+    if (planOnEntry.current === null) {
+      planOnEntry.current = planRuns;
+      return;
+    }
+    if (planRuns > planOnEntry.current) {
+      planOnEntry.current = planRuns;
       setCelebrate((value) => value + 1);
       setIndex((current) => current + 1);
     }
-  }, [step, hasPlan]);
+  }, [planRuns, step?.id]);
 
   useEffect(() => {
     if (!step) return;

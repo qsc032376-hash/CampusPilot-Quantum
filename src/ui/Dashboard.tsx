@@ -524,7 +524,12 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
         </div>
       </main>
 
-      <Tour hasPlan={multi !== null} hasSelection={selectedBlock !== null} replayKey={tourReplay} />
+      <Tour
+        hasPlan={multi !== null}
+        planRuns={planRuns}
+        hasSelection={selectedBlock !== null}
+        replayKey={tourReplay}
+      />
 
       <div className="cp-reservation">
         <ReservationPlanner />

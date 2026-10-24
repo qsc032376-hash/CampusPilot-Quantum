@@ -109,8 +109,13 @@
 }
 
 .cp-tour__card--center {
-  top: calc(50% - 130px);
+  top: 50%;
   bottom: auto;
+  left: 50%;
+  right: auto;
+  width: min(380px, calc(100vw - 24px));
+  max-width: 380px;
+  transform: translate(-50%, -50%);
 }
 
 @media (max-width: 560px) {
@@ -287,6 +292,15 @@
 }
 
 /* Reduced motion keeps every step and every control, minus the movement. */
+
+.cp-tour--reduced .cp-tour__mask {
+  animation: none !important;
+  background: rgba(28, 8, 12, 0.72);
+}
+
+.cp-tour--reduced .cp-tour__mask--holed {
+  background: transparent;
+}
 .cp-tour--reduced .cp-tour__spot,
 .cp-tour--reduced .cp-tour__spot::after,
 .cp-tour--reduced .cp-tour__spot::before,
