@@ -57,6 +57,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
     setDue(value);
     setChoice(null);
     setError(null);
+    setErrorField(null);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -85,6 +86,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
     }
 
     setError(null);
+    setErrorField(null);
     onAdd({ ...result.draft, ...(located.location ? { location: located.location } : {}) });
     setTitle('');
     setCourseCode('');
@@ -197,6 +199,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
             <select className="cp-input" value={activeChoice} onChange={(event) => {
               setChoice({ due, iso: event.target.value });
               setError(null);
+              setErrorField(null);
             }}>
               <option value="" disabled>
                 Choose EDT (earlier) or EST (later)…

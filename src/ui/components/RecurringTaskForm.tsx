@@ -97,6 +97,7 @@ export function RecurringTaskForm({
     setDraft(emptyDraft(defaultStartDate, locations));
     setEditingId(null);
     setError(null);
+    setErrorField(null);
     setStartTouched(false);
     setLegacyEditing(false);
   }
@@ -169,6 +170,7 @@ export function RecurringTaskForm({
     setDraft(seriesToDraft(item, locations));
     setEditingId(item.id);
     setError(null);
+    setErrorField(null);
     setStartTouched(true);
     // An undefined location stays undefined unless the user picks a new value.
     setLegacyEditing(item.location === undefined);

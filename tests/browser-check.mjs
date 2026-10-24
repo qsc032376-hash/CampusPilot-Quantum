@@ -1068,16 +1068,16 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 200));
     await clickButton('Repeating task');
     await new Promise((resolve) => setTimeout(resolve, 250));
-    const afterSwitch = await modeState();
+    const afterTargetSwitch = await modeState();
     record(
       'switching shows the repeating pane',
-      afterSwitch.visible[0] === false && afterSwitch.visible[1] === true,
-      JSON.stringify(afterSwitch),
+      afterTargetSwitch.visible[0] === false && afterTargetSwitch.visible[1] === true,
+      JSON.stringify(afterTargetSwitch),
     );
     record(
       'an unsubmitted one-time draft survives a mode switch',
-      afterSwitch.title === 'Draft task',
-      String(afterSwitch.title),
+      afterTargetSwitch.title === 'Draft task',
+      String(afterTargetSwitch.title),
     );
 
     await evaluate(`(() => {
@@ -2075,6 +2075,158 @@ async function main() {
         return new Set(ids).size === ids.length;
       })()`),
       '',
+    );
+
+    // --- D QA: the repeating form clears stale error state ---
+    const qaSeriesPanel = '#app section[aria-labelledby="cp-recurring-heading"]';
+    const qaSeriesTitle = `${qaSeriesPanel} form.cp-form input:not([type])`;
+    const qaSeriesFacts = () =>
+      evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(qaSeriesTitle)});
+        const error = document.querySelector('${qaSeriesPanel} form.cp-form .cp-error');
+        return {
+          invalid: input ? input.getAttribute('aria-invalid') : null,
+          describedBy: input ? input.getAttribute('aria-describedby') : null,
+          errorText: error ? error.textContent.trim() : '',
+          editing: !!(document.querySelector('${qaSeriesPanel}') || {}).textContent?.includes('Save changes'),
+        };
+      })()`);
+    const qaAddSeries = async (title) => {
+      await evaluate([
+        '(() => {',
+        `  const section = document.querySelector('${qaSeriesPanel}');`,
+        '  const form = section.querySelector("form.cp-form");',
+        '  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;',
+        '  const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value").set;',
+        '  const input = form.querySelector("input:not([type])");',
+        '  setter.call(input, ' + JSON.stringify(title) + ');',
+        "  input.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  const frequency = [...form.querySelectorAll("select")].find((item) =>',
+        '    [...item.options].some((option) => option.value === "daily"),',
+        '  );',
+        '  setSelect.call(frequency, "daily");',
+        "  frequency.dispatchEvent(new Event('change', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await clickButton('Add repeating task');
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const qaStartEdit = async (title) => {
+      await evaluate([
+        '(() => {',
+        `  const section = document.querySelector('${qaSeriesPanel}');`,
+        '  const row = [...section.querySelectorAll(".cp-series__row")].find((el) =>',
+        '    el.textContent.includes(' + JSON.stringify(title) + '),',
+        '  );',
+        '  if (!row) return "missing";',
+        '  const edit = [...row.querySelectorAll("button")].find((b) => b.textContent.includes("Edit"));',
+        '  if (!edit) return "missing";',
+        '  edit.click();',
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    };
+    const qaClearTitle = async () => {
+      await evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(qaSeriesTitle)});
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(input, '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+    const qaSubmitSeries = async () => {
+      await evaluate(`(() => {
+        const form = document.querySelector('${qaSeriesPanel} form.cp-form');
+        if (!form) return 'missing';
+        form.requestSubmit();
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    };
+    const qaRaiseSeriesError = async () => {
+      await qaClearTitle();
+      await qaSubmitSeries();
+      return qaSeriesFacts();
+    };
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await qaAddSeries('Alpha');
+    await qaAddSeries('Beta');
+    await qaAddSeries('Gamma');
+
+    // Cancel
+    await qaStartEdit('Alpha');
+    const cancelRaised = await qaRaiseSeriesError();
+    await evaluate(`[...document.querySelectorAll('${qaSeriesPanel} button')].find((b) => b.textContent.includes('Cancel')).click()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const qaStaleAfterCancel = await qaSeriesFacts();
+    record(
+      'Cancel clears the failing edit state',
+      cancelRaised.invalid === 'true' && qaStaleAfterCancel.invalid !== 'true' && !qaStaleAfterCancel.describedBy && qaStaleAfterCancel.errorText === '',
+      JSON.stringify({ raised: cancelRaised.invalid, after: qaStaleAfterCancel }),
+    );
+
+    // Delete the series being edited
+    await qaStartEdit('Alpha');
+    const deleteRaised = await qaRaiseSeriesError();
+    await evaluate(`(() => {
+      const section = document.querySelector('${qaSeriesPanel}');
+      const row = [...section.querySelectorAll('.cp-series__row')].find((el) => el.textContent.includes('Alpha'));
+      if (!row) return 'missing';
+      const remove = [...row.querySelectorAll('button')].find((b) => b.textContent.includes('Delete'));
+      if (!remove) return 'missing';
+      remove.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const qaStaleAfterDelete = await qaSeriesFacts();
+    record(
+      'deleting the edited series clears the failing state',
+      deleteRaised.invalid === 'true' && qaStaleAfterDelete.invalid !== 'true' && !qaStaleAfterDelete.describedBy && qaStaleAfterDelete.errorText === '',
+      JSON.stringify({ raised: deleteRaised.invalid, after: qaStaleAfterDelete }),
+    );
+
+    // Switch the edit target while an error is showing
+    await qaStartEdit('Beta');
+    const switchRaised = await qaRaiseSeriesError();
+    await qaStartEdit('Gamma');
+    const qaStaleAfterSwitch = await qaSeriesFacts();
+    record(
+      'switching the edit target clears the failing state',
+      switchRaised.invalid === 'true' && qaStaleAfterSwitch.invalid !== 'true' && !qaStaleAfterSwitch.describedBy && qaStaleAfterSwitch.errorText === '',
+      JSON.stringify({ raised: switchRaised.invalid, after: qaStaleAfterSwitch }),
+    );
+
+    // Fixing the input and submitting again
+    await qaStartEdit('Beta');
+    await qaRaiseSeriesError();
+    await evaluate(`(() => {
+      const input = document.querySelector(${JSON.stringify(qaSeriesTitle)});
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Beta renamed');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const fixedBeforeSubmit = await qaSeriesFacts();
+    await qaSubmitSeries();
+    const qaStaleAfterFix = await qaSeriesFacts();
+    record(
+      'fixing the input clears the association before and after saving',
+      fixedBeforeSubmit.invalid !== 'true' &&
+        !fixedBeforeSubmit.describedBy &&
+        qaStaleAfterFix.invalid !== 'true' &&
+        !qaStaleAfterFix.describedBy &&
+        qaStaleAfterFix.errorText === '',
+      JSON.stringify({ before: fixedBeforeSubmit, after: qaStaleAfterFix }),
     );
 
     // --- campus map ---
