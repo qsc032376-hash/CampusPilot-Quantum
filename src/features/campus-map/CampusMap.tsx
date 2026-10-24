@@ -147,7 +147,7 @@ export function CampusMap() {
             const marker = leaflet.marker([location.lat, location.lng], {
               icon: leaflet.divIcon({
                 className: `cp-map__pin cp-map__pin--${location.category}`,
-                html: '',
+                html: '<span class="cp-map__pin-dot"></span>',
                 iconSize: [16, 16],
                 iconAnchor: [8, 8],
               }),

@@ -379,8 +379,10 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
               />
             </div>
           </section>
-          <LocationCard block={selectedBlock} request={request} />
-          <RecommendedLocations block={selectedBlock} request={request} />
+          <div className="cp-where" data-tour="where">
+            <LocationCard block={selectedBlock} request={request} />
+            <RecommendedLocations block={selectedBlock} request={request} />
+          </div>
         </div>
 
         <div className="cp-column">

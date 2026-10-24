@@ -113,7 +113,7 @@ export const TOUR_STEPS: TourStep[] = [
     body: [
       'Selecting a block shows its Where card, and suggestions for places that tend to work. A suggestion is not an assignment, not live availability and not a reservation.',
     ],
-    anchor: '#cp-location-heading',
+    anchor: '[data-tour="where"]',
     fallbackAnchor: '#cp-schedule-heading',
     effect: 'iris',
     hint: 'Pick any block in the timeline to see its Where card.',

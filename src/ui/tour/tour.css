@@ -263,14 +263,23 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* Map markers pop in one after another. */
-.cp-tour-map [class*='marker'] {
+/* Only our own inner decoration pops; Leaflet keeps the positioning transform. */
+.cp-map__pin-dot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  border: 2px solid rgba(253, 250, 244, 0.95);
+  pointer-events: none;
+}
+
+.cp-tour-map .cp-map__pin-dot {
   animation: cp-tour-pop 420ms ease-out both;
 }
 
-.cp-tour-map [class*='marker']:nth-child(2) { animation-delay: 90ms; }
-.cp-tour-map [class*='marker']:nth-child(3) { animation-delay: 180ms; }
-.cp-tour-map [class*='marker']:nth-child(4) { animation-delay: 270ms; }
+.cp-tour-map .cp-map__pin:nth-child(2) .cp-map__pin-dot { animation-delay: 90ms; }
+.cp-tour-map .cp-map__pin:nth-child(3) .cp-map__pin-dot { animation-delay: 180ms; }
+.cp-tour-map .cp-map__pin:nth-child(4) .cp-map__pin-dot { animation-delay: 270ms; }
 
 @keyframes cp-tour-pop {
   from { transform: scale(0.6); opacity: 0.4; }
@@ -292,7 +301,7 @@
 .cp-tour--reduced .cp-tour-stagger .cp-field-row > *,
 .cp-tour--reduced .cp-tour-stagger .cp-modetab,
 .cp-tour--reduced .cp-tour-stagger .cp-subhead,
-.cp-tour--reduced .cp-tour-map [class*='marker'] {
+.cp-tour--reduced .cp-tour-map .cp-map__pin-dot {
   animation: none !important;
 }
 

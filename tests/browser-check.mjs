@@ -189,7 +189,10 @@ async function main() {
       });
     const evaluate = async (expression) => {
       const reply = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-      if (reply.result?.exceptionDetails) throw new Error(reply.result.exceptionDetails.text ?? 'eval failed');
+      if (reply.result?.exceptionDetails) {
+        const details = reply.result.exceptionDetails;
+        throw new Error((details.exception && details.exception.description) || details.text || 'eval failed');
+      }
       return reply.result?.result?.value;
     };
 
@@ -2855,6 +2858,13 @@ async function main() {
       '',
     );
     // --- product tour ---
+    const waitForApp = async () => {
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        if (await evaluate("Boolean(document.querySelector('#app .cp-header'))")) return true;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      return false;
+    };
     const tourState = () =>
       evaluate(`(() => {
         const tour = document.querySelector('#app .cp-tour');
@@ -2862,9 +2872,9 @@ async function main() {
         const card = tour.querySelector('.cp-tour__card');
         const box = card.getBoundingClientRect();
         return {
-          progress: (tour.querySelector('.cp-tour__progress') || {}).textContent.trim(),
-          title: (tour.querySelector('.cp-tour__title') || {}).textContent.trim(),
-          next: (tour.querySelector('.cp-tour__next') || {}).textContent.trim(),
+          progress: ((tour.querySelector('.cp-tour__progress') || {}).textContent || '').trim(),
+          title: ((tour.querySelector('.cp-tour__title') || {}).textContent || '').trim(),
+          next: ((tour.querySelector('.cp-tour__next') || {}).textContent || '').trim(),
           cardVisible: box.height > 0 && box.width > 0,
           cardTop: Math.round(box.top),
           reduced: tour.classList.contains('cp-tour--reduced'),
@@ -2887,7 +2897,11 @@ async function main() {
     };
     const advanceTour = async (times) => {
       for (let index = 0; index < times; index += 1) {
-        await evaluate("document.querySelector('#app .cp-tour__next').click()");
+        await evaluate(`(() => {
+          const next = document.querySelector('#app .cp-tour__next');
+          if (next) next.click();
+          return Boolean(next);
+        })()`);
         await new Promise((resolve) => setTimeout(resolve, 420));
       }
     };
@@ -2923,7 +2937,7 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 1100));
     record('a skipped tour does not reopen on refresh', (await tourState()) === null, '');
 
-    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) button.click(); return 'ok'; })()");
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) { button.focus(); button.click(); } return 'ok'; })()");
     await new Promise((resolve) => setTimeout(resolve, 450));
     const replayed = await tourState();
     record(
@@ -2932,12 +2946,29 @@ async function main() {
       JSON.stringify(replayed && { progress: replayed.progress }),
     );
 
+    await tourKey('Escape', 'Escape', 27);
+    const restoredFocus = await evaluate(`(() => {
+      const replay = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
+      return { onReplay: !!replay && document.activeElement === replay };
+    })()`);
+    record(
+      'skipping returns focus to the control that opened the tour',
+      restoredFocus.onReplay === true,
+      JSON.stringify(restoredFocus),
+    );
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) { button.focus(); button.click(); } return 'ok'; })()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
     await advanceTour(5);
     const atBuild = await tourState();
+    const buildFocus = await evaluate(`(() => {
+      const build = document.querySelector('[data-tour="build"]');
+      return { onBuild: document.activeElement === build, tag: document.activeElement ? document.activeElement.tagName : null };
+    })()`);
     record(
-      'the tour reaches the build step with the real button focused',
-      atBuild !== null && /6 of 11/.test(atBuild.progress) && /waiting for build/i.test(atBuild.next),
-      JSON.stringify(atBuild && { progress: atBuild.progress, next: atBuild.next }),
+      'the build step hands keyboard focus to the real Build button',
+      atBuild !== null && /6 of 11/.test(atBuild.progress) && buildFocus.onBuild === true,
+      JSON.stringify({ progress: atBuild && atBuild.progress, buildFocus }),
     );
 
     // A failing validation must not count as a finished build.
@@ -2975,14 +3006,14 @@ async function main() {
       return 'ok';
     })()`);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    const buildPoint = await evaluate(`(() => {
-      const button = document.querySelector('[data-tour="build"]');
-      const box = button.getBoundingClientRect();
-      return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) };
-    })()`);
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: buildPoint.x, y: buildPoint.y, button: 'left', clickCount: 1 });
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: buildPoint.x, y: buildPoint.y, button: 'left', clickCount: 1 });
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const stillFocused = await evaluate(`document.activeElement === document.querySelector('[data-tour="build"]')`);
+    await send('Input.dispatchKeyEvent', {
+      type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+      text: '\r', unmodifiedText: '\r',
+    });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    record('the Build button keeps focus for the keyboard activation', stillFocused === true, String(stillFocused));
     const afterRealBuild = await tourState();
     const sessionsAfterBuild = await evaluate("document.querySelectorAll('#app .cp-session').length");
     record(
@@ -2991,7 +3022,29 @@ async function main() {
       JSON.stringify({ progress: afterRealBuild && afterRealBuild.progress, sessions: sessionsAfterBuild }),
     );
 
-    await advanceTour(4);
+    await advanceTour(2);
+    const atMap = await tourState();
+    const markerStability = await evaluate(`(async () => {
+      const pins = [...document.querySelectorAll('#app .cp-map__pin')];
+      const before = pins.map((pin) => getComputedStyle(pin).transform);
+      const mount = document.querySelector('#app .cp-map-mount');
+      mount.classList.add('cp-tour-map');
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const after = pins.map((pin) => getComputedStyle(pin).transform);
+      mount.classList.remove('cp-tour-map');
+      return {
+        count: pins.length,
+        same: before.length === after.length && before.every((value, index) => value === after[index]),
+        dots: document.querySelectorAll('#app .cp-map__pin-dot').length,
+      };
+    })()`);
+    record(
+      'the marker effect leaves the Leaflet pin positioning untouched',
+      atMap !== null && /9 of 11/.test(atMap.progress) && markerStability.count > 0 && markerStability.same === true && markerStability.dots === markerStability.count,
+      JSON.stringify({ progress: atMap && atMap.progress, ...markerStability }),
+    );
+
+    await advanceTour(2);
     const lastStep = await tourState();
     record(
       'the tour ends on the finish step',
@@ -3018,6 +3071,23 @@ async function main() {
       'reduced motion keeps the tour and marks it as still',
       reducedState !== null && reducedState.reduced === true && /1 of 11/.test(reducedState.progress),
       JSON.stringify(reducedState && { reduced: reducedState.reduced, progress: reducedState.progress }),
+    );
+
+    // Reduced motion must still bring the focused panel into view.
+    await evaluate('window.scrollTo(0, document.body.scrollHeight)');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await advanceTour(3);
+    const reducedTarget = await evaluate(`(() => {
+      const panel = document.querySelector('#app section[aria-labelledby="cp-range-heading"]');
+      if (!panel) return null;
+      const box = panel.getBoundingClientRect();
+      return { top: Math.round(box.top), visible: box.top < window.innerHeight && box.bottom > 0 };
+    })()`);
+    const reducedStep = await tourState();
+    record(
+      'reduced motion still scrolls the target into view',
+      reducedTarget !== null && reducedTarget.visible === true && /4 of 11/.test(reducedStep.progress),
+      JSON.stringify({ ...reducedTarget, progress: reducedStep && reducedStep.progress }),
     );
 
     for (const width of [320, 375]) {

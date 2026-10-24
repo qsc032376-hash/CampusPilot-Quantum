@@ -65,6 +65,7 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const stepRef = useRef<HTMLDivElement | null>(null);
   const lastChapter = useRef<TourStep['chapter'] | null>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
 
   const step: TourStep | null = index >= 0 ? TOUR_STEPS[index] ?? null : null;
 
@@ -72,12 +73,16 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
   useEffect(() => {
     const stored = readStored();
     if (stored === 'done' || stored === 'skipped') return;
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIndex(0);
   }, []);
 
   // Replay from the header button.
   useEffect(() => {
-    if (replayKey > 0) setIndex(0);
+    if (replayKey > 0) {
+      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setIndex(0);
+    }
   }, [replayKey]);
 
   useEffect(() => {
@@ -104,12 +109,14 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
       frame = window.requestAnimationFrame(sync);
     };
     const element = resolve(step);
-    if (element && !reduced) {
-      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (element) {
+      // Reduced motion removes the easing, never the scrolling itself.
+      const behavior: ScrollBehavior = reduced ? 'auto' : 'smooth';
+      element.scrollIntoView({ block: 'center', behavior });
       // On narrow screens the card docks at the bottom, so lift the target clear.
       const box = element.getBoundingClientRect();
       if (window.innerWidth < 560 && box.bottom > window.innerHeight * 0.5) {
-        window.scrollBy({ top: box.top - window.innerHeight * 0.18, behavior: 'smooth' });
+        window.scrollBy({ top: box.top - window.innerHeight * 0.18, behavior });
       }
     }
     sync();
@@ -156,15 +163,28 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
     };
   }, [step, reduced]);
 
-  // Move focus to the card so keyboard users land inside the tour.
+  // Interactive steps hand focus to the real control; the rest focus the card.
   useEffect(() => {
-    if (step) cardRef.current?.focus();
+    if (!step) return;
+    if (step.waitsForPlan) {
+      const buildButton = document.querySelector<HTMLElement>('[data-tour="build"]');
+      if (buildButton) {
+        buildButton.focus();
+        return;
+      }
+    }
+    cardRef.current?.focus();
   }, [step]);
 
   const finish = useCallback((how: 'done' | 'skipped') => {
     store(how);
     setIndex(-1);
     setRect(null);
+    // Hand focus back to whatever opened the tour, so it is never lost.
+    const back = returnFocus.current;
+    window.requestAnimationFrame(() => {
+      if (back && document.contains(back)) back.focus();
+    });
   }, []);
 
   const go = useCallback(
@@ -194,6 +214,13 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
   useEffect(() => {
     if (!step) return;
     const onKey = (event: KeyboardEvent) => {
+      // Never hijack typing: arrows belong to the field while it has focus.
+      const target = event.target as HTMLElement | null;
+      const editing =
+        target instanceof HTMLElement &&
+        Boolean(target.closest('input, select, textarea, [contenteditable="true"], [role="textbox"]'));
+      if (event.defaultPrevented) return;
+      if (editing && event.key !== 'Escape') return;
       if (event.key === 'Escape') {
         event.preventDefault();
         finish('skipped');
@@ -203,18 +230,6 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault();
         go(-1);
-      } else if (event.key === 'Tab' && cardRef.current) {
-        const items = cardRef.current.querySelectorAll<HTMLElement>('button, [href], [tabindex]:not([tabindex="-1"])');
-        if (items.length === 0) return;
-        const first = items[0];
-        const last = items[items.length - 1];
-        if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        } else if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        }
       }
     };
     document.addEventListener('keydown', onKey);
@@ -240,7 +255,6 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
     <div
       className={`cp-tour${reduced ? ' cp-tour--reduced' : ''}`}
       role="dialog"
-      aria-modal="true"
       aria-labelledby="cp-tour-title"
       aria-describedby="cp-tour-body"
     >
@@ -314,14 +328,11 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
               Back
             </button>
           ) : null}
-          <button
-            type="button"
-            className="cp-tour__next"
-            onClick={() => go(1)}
-            disabled={Boolean(step.waitsForPlan)}
-          >
-            {index === TOUR_STEPS.length - 1 ? 'Finish' : step.waitsForPlan ? 'Waiting for build' : 'Next'}
-          </button>
+          {step.waitsForPlan ? null : (
+            <button type="button" className="cp-tour__next" onClick={() => go(1)}>
+              {index === TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}
+            </button>
+          )}
         </div>
       </div>
     </div>
