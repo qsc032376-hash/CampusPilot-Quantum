@@ -95,7 +95,7 @@ function Fixture() {
 createRoot(document.getElementById('root')).render(<Fixture />);
 `;
 
-const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="bundle.css"></head>
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script>try{if(!localStorage.getItem("campuspilot.tour.seed")){localStorage.setItem("campuspilot.tour.v1","done");localStorage.setItem("campuspilot.tour.seed","1")}}catch(e){}</script><link rel="stylesheet" href="bundle.css"></head>
 <body><div id="root"></div><script type="module" src="bundle.js"></script></body></html>`;
 
 function findChrome() {
@@ -2854,6 +2854,186 @@ async function main() {
       ),
       '',
     );
+    // --- product tour ---
+    const tourState = () =>
+      evaluate(`(() => {
+        const tour = document.querySelector('#app .cp-tour');
+        if (!tour) return null;
+        const card = tour.querySelector('.cp-tour__card');
+        const box = card.getBoundingClientRect();
+        return {
+          progress: (tour.querySelector('.cp-tour__progress') || {}).textContent.trim(),
+          title: (tour.querySelector('.cp-tour__title') || {}).textContent.trim(),
+          next: (tour.querySelector('.cp-tour__next') || {}).textContent.trim(),
+          cardVisible: box.height > 0 && box.width > 0,
+          cardTop: Math.round(box.top),
+          reduced: tour.classList.contains('cp-tour--reduced'),
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+    const reloadTour = async (stored) => {
+      await evaluate(
+        stored === null
+          ? "localStorage.removeItem('campuspilot.tour.v1')"
+          : `localStorage.setItem('campuspilot.tour.v1', '${stored}')`,
+      );
+      await send('Page.reload', {});
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    };
+    const tourKey = async (key, code, keyCode) => {
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    };
+    const advanceTour = async (times) => {
+      for (let index = 0; index < times; index += 1) {
+        await evaluate("document.querySelector('#app .cp-tour__next').click()");
+        await new Promise((resolve) => setTimeout(resolve, 420));
+      }
+    };
+
+    await reloadTour(null);
+    const welcome = await tourState();
+    record(
+      'the tour opens on the welcome step for a first visit',
+      welcome !== null &&
+        /1 of 11/.test(welcome.progress) &&
+        welcome.title === 'Build your first study plan' &&
+        welcome.cardVisible,
+      JSON.stringify(welcome),
+    );
+
+    await tourKey('ArrowRight', 'ArrowRight', 39);
+    const taskStep = await tourState();
+    record(
+      'the arrow keys move the tour forward',
+      taskStep !== null && /2 of 11/.test(taskStep.progress) && taskStep.title === 'Start with one task',
+      JSON.stringify(taskStep && { progress: taskStep.progress, title: taskStep.title }),
+    );
+
+    await tourKey('Escape', 'Escape', 27);
+    const afterEscape = await evaluate("(() => ({ tour: !!document.querySelector('#app .cp-tour'), stored: localStorage.getItem('campuspilot.tour.v1') }))()");
+    record(
+      'Escape skips the tour and stores the dismissal',
+      afterEscape.tour === false && afterEscape.stored === 'skipped',
+      JSON.stringify(afterEscape),
+    );
+
+    await send('Page.reload', {});
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    record('a skipped tour does not reopen on refresh', (await tourState()) === null, '');
+
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) button.click(); return 'ok'; })()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const replayed = await tourState();
+    record(
+      'Replay tour restarts from the first step',
+      replayed !== null && /1 of 11/.test(replayed.progress),
+      JSON.stringify(replayed && { progress: replayed.progress }),
+    );
+
+    await advanceTour(5);
+    const atBuild = await tourState();
+    record(
+      'the tour reaches the build step with the real button focused',
+      atBuild !== null && /6 of 11/.test(atBuild.progress) && /waiting for build/i.test(atBuild.next),
+      JSON.stringify(atBuild && { progress: atBuild.progress, next: atBuild.next }),
+    );
+
+    // A failing validation must not count as a finished build.
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="number"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '0');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const afterInvalidBuild = await tourState();
+    record(
+      'a failed build leaves the tour on the build step',
+      afterInvalidBuild !== null && /6 of 11/.test(afterInvalidBuild.progress),
+      JSON.stringify(afterInvalidBuild && { progress: afterInvalidBuild.progress, title: afterInvalidBuild.title }),
+    );
+
+    // Restore a valid range, then press the real button with a real mouse click.
+    await evaluate(`(() => {
+      const date = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter2 = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter2.call(date, '2026-10-19');
+      date.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="number"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '7');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const buildPoint = await evaluate(`(() => {
+      const button = document.querySelector('[data-tour="build"]');
+      const box = button.getBoundingClientRect();
+      return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) };
+    })()`);
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: buildPoint.x, y: buildPoint.y, button: 'left', clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: buildPoint.x, y: buildPoint.y, button: 'left', clickCount: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const afterRealBuild = await tourState();
+    const sessionsAfterBuild = await evaluate("document.querySelectorAll('#app .cp-session').length");
+    record(
+      'a real build is not swallowed by the tour and advances it',
+      afterRealBuild !== null && /7 of 11/.test(afterRealBuild.progress) && sessionsAfterBuild > 0,
+      JSON.stringify({ progress: afterRealBuild && afterRealBuild.progress, sessions: sessionsAfterBuild }),
+    );
+
+    await advanceTour(4);
+    const lastStep = await tourState();
+    record(
+      'the tour ends on the finish step',
+      lastStep !== null && /11 of 11/.test(lastStep.progress) && lastStep.next === 'Finish',
+      JSON.stringify(lastStep && { progress: lastStep.progress, next: lastStep.next }),
+    );
+    await evaluate("document.querySelector('#app .cp-tour__next').click()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const finished = await evaluate("(() => ({ tour: !!document.querySelector('#app .cp-tour'), stored: localStorage.getItem('campuspilot.tour.v1') }))()");
+    record(
+      'finishing closes the tour and records completion',
+      finished.tour === false && finished.stored === 'done',
+      JSON.stringify(finished),
+    );
+    await send('Page.reload', {});
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    record('a finished tour does not reopen on refresh', (await tourState()) === null, '');
+
+    // Reduced motion keeps every step but drops the movement.
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await reloadTour(null);
+    const reducedState = await tourState();
+    record(
+      'reduced motion keeps the tour and marks it as still',
+      reducedState !== null && reducedState.reduced === true && /1 of 11/.test(reducedState.progress),
+      JSON.stringify(reducedState && { reduced: reducedState.reduced, progress: reducedState.progress }),
+    );
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const narrowTour = await tourState();
+      record(
+        `the tour card fits a ${width}px viewport without overflow`,
+        narrowTour !== null && narrowTour.cardVisible && narrowTour.overflow === 0,
+        JSON.stringify(narrowTour && { width, overflow: narrowTour.overflow, cardTop: narrowTour.cardTop }),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await send('Emulation.setEmulatedMedia', { features: [] });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
   } finally {
     if (socket) socket.close();
     chrome.kill();

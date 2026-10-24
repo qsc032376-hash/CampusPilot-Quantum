@@ -783,3 +783,21 @@
 @media (max-width: 620px) {
   .cp-header__title { font-size: 22px; line-height: 1.25; }
 }
+
+.cp-linkbutton {
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #a51d2d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cp-linkbutton:focus-visible {
+  outline: 3px solid #a51d2d;
+  outline-offset: 2px;
+}

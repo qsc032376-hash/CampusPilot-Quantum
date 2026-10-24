@@ -1,0 +1,301 @@
+/* First-run product tour: dark mask, iris spotlight, chapter wipe. */
+
+.cp-tour {
+  --cp-tour-ink: #2a0d12;
+  --cp-tour-warm: #fdfaf4;
+  --cp-tour-accent: #a51d2d;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.cp-tour__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 8, 12, 0);
+  animation: cp-tour-mask-in 320ms ease-out forwards;
+}
+
+.cp-tour__mask--holed {
+  background: transparent;
+}
+
+@keyframes cp-tour-mask-in {
+  from { background: rgba(28, 8, 12, 0); }
+  to { background: rgba(28, 8, 12, 0.72); }
+}
+
+/* The spotlight is a transparent box whose huge shadow paints the mask. */
+.cp-tour__spot {
+  position: absolute;
+  border-radius: 14px;
+  box-shadow: 0 0 0 200vmax rgba(28, 8, 12, 0.72), 0 0 0 1px rgba(253, 250, 244, 0.55) inset;
+  transition:
+    top 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 380ms ease;
+  animation: cp-tour-iris 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes cp-tour-iris {
+  from { box-shadow: 0 0 0 200vmax rgba(28, 8, 12, 0.72), 0 0 0 14px rgba(253, 250, 244, 0.18) inset; }
+  to { box-shadow: 0 0 0 200vmax rgba(28, 8, 12, 0.72), 0 0 0 1px rgba(253, 250, 244, 0.55) inset; }
+}
+
+/* Border trace: a warm stroke sweeps the edge once. */
+.cp-tour__spot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 16px;
+  border: 2px solid rgba(253, 250, 244, 0.85);
+  mask-image: linear-gradient(130deg, transparent 42%, #000 50%, transparent 58%);
+  mask-size: 320% 320%;
+  animation: cp-tour-trace 900ms ease-out 1;
+  pointer-events: none;
+}
+
+@keyframes cp-tour-trace {
+  from { mask-position: 120% 0; opacity: 0.9; }
+  to { mask-position: -20% 0; opacity: 0; }
+}
+
+.cp-tour__spot--stagger::before,
+.cp-tour__spot--map::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 20px;
+  box-shadow: 0 0 0 0 rgba(165, 29, 45, 0.45);
+  animation: cp-tour-pulse 1200ms ease-out 1;
+}
+
+@keyframes cp-tour-pulse {
+  from { box-shadow: 0 0 0 0 rgba(165, 29, 45, 0.45); }
+  to { box-shadow: 0 0 0 22px rgba(165, 29, 45, 0); }
+}
+
+.cp-tour__card {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  margin: 0 auto;
+  max-width: 380px;
+  padding: 16px 18px 14px;
+  border-radius: 14px;
+  background: var(--cp-tour-warm);
+  color: var(--cp-tour-ink);
+  box-shadow: 0 18px 48px rgba(42, 13, 18, 0.34);
+  pointer-events: auto;
+  animation: cp-tour-card 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (min-width: 560px) {
+  .cp-tour__card {
+    left: 0;
+    right: 0;
+    bottom: auto;
+    max-width: none;
+  }
+}
+
+@keyframes cp-tour-card {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.cp-tour__card--center {
+  top: calc(50% - 130px);
+  bottom: auto;
+}
+
+@media (max-width: 560px) {
+  .cp-tour__card--center {
+    top: auto;
+    bottom: 14px;
+  }
+}
+
+.cp-tour__card:focus-visible {
+  outline: 3px solid var(--cp-tour-accent);
+  outline-offset: 3px;
+}
+
+.cp-tour__progress {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cp-tour-accent);
+}
+
+.cp-tour__title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.cp-tour__body p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #4a3a3d;
+}
+
+.cp-tour__hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--cp-tour-accent);
+}
+
+.cp-tour__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cp-tour__spacer { flex: 1; }
+
+.cp-tour__actions button {
+  border: 1px solid #e4ddd2;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  color: var(--cp-tour-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cp-tour__actions button:focus-visible {
+  outline: 3px solid var(--cp-tour-accent);
+  outline-offset: 2px;
+}
+
+.cp-tour__skip {
+  border-color: transparent;
+  background: transparent;
+  color: #7a6a6d;
+}
+
+.cp-tour__next {
+  background: var(--cp-tour-accent) !important;
+  border-color: var(--cp-tour-accent) !important;
+  color: #fff !important;
+}
+
+.cp-tour__next:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Chapter wipe between the two halves of the tour. */
+.cp-tour__wipe {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, rgba(253, 250, 244, 0) 0%, rgba(253, 250, 244, 0.92) 45%, rgba(165, 29, 45, 0.35) 55%, rgba(253, 250, 244, 0) 100%);
+  transform: translateX(-110%);
+  animation: cp-tour-wipe 620ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes cp-tour-wipe {
+  from { transform: translateX(-110%); opacity: 0.9; }
+  to { transform: translateX(110%); opacity: 0; }
+}
+
+.cp-tour__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Timeline playhead sweeps the schedule once. */
+.cp-tour__playhead {
+  position: absolute;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(165, 29, 45, 0), rgba(165, 29, 45, 0.8), rgba(165, 29, 45, 0));
+  animation: cp-tour-playhead 1600ms ease-in-out 1;
+}
+
+@keyframes cp-tour-playhead {
+  from { transform: translateX(0); opacity: 0; }
+  20% { opacity: 1; }
+  to { transform: translateX(220px); opacity: 0; }
+}
+
+/* Restrained success ring after a real build. */
+.cp-tour__ring {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: 999px;
+  border: 2px solid rgba(253, 250, 244, 0.9);
+  animation: cp-tour-ring 900ms ease-out 1 forwards;
+}
+
+@keyframes cp-tour-ring {
+  from { transform: scale(0.6); opacity: 0.9; }
+  to { transform: scale(6); opacity: 0; }
+}
+
+/* Staggered labels for rules, pace and grouped results. */
+.cp-tour-stagger .cp-field-row > *,
+.cp-tour-stagger .cp-modetab,
+.cp-tour-stagger .cp-subhead {
+  animation: cp-tour-rise 420ms ease-out both;
+}
+
+.cp-tour-stagger .cp-field-row > *:nth-child(2) { animation-delay: 70ms; }
+.cp-tour-stagger .cp-field-row > *:nth-child(3) { animation-delay: 140ms; }
+.cp-tour-stagger .cp-field-row > *:nth-child(4) { animation-delay: 210ms; }
+
+@keyframes cp-tour-rise {
+  from { transform: translateY(6px); opacity: 0.35; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Map markers pop in one after another. */
+.cp-tour-map [class*='marker'] {
+  animation: cp-tour-pop 420ms ease-out both;
+}
+
+.cp-tour-map [class*='marker']:nth-child(2) { animation-delay: 90ms; }
+.cp-tour-map [class*='marker']:nth-child(3) { animation-delay: 180ms; }
+.cp-tour-map [class*='marker']:nth-child(4) { animation-delay: 270ms; }
+
+@keyframes cp-tour-pop {
+  from { transform: scale(0.6); opacity: 0.4; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Reduced motion keeps every step and every control, minus the movement. */
+.cp-tour--reduced .cp-tour__spot,
+.cp-tour--reduced .cp-tour__spot::after,
+.cp-tour--reduced .cp-tour__spot::before,
+.cp-tour--reduced .cp-tour__card,
+.cp-tour--reduced .cp-tour__wipe,
+.cp-tour--reduced .cp-tour__playhead,
+.cp-tour--reduced .cp-tour__ring {
+  animation: none !important;
+  transition: none !important;
+}
+
+.cp-tour--reduced .cp-tour-stagger .cp-field-row > *,
+.cp-tour--reduced .cp-tour-stagger .cp-modetab,
+.cp-tour--reduced .cp-tour-stagger .cp-subhead,
+.cp-tour--reduced .cp-tour-map [class*='marker'] {
+  animation: none !important;
+}
+
+@media (max-width: 560px) {
+  .cp-tour__card { max-height: 46vh; overflow: auto; }
+}
