@@ -17,6 +17,10 @@ export interface TourStep {
   hint?: string;
   /** The tour waits for a real result before it can continue. */
   waitsForPlan?: boolean;
+  /** Body shown while the step has nothing to point at yet. */
+  emptyBody?: string[];
+  /** The step describes a real selection and must not claim one exists. */
+  requiresSelection?: boolean;
 }
 
 export const TOUR_STEPS: TourStep[] = [
@@ -51,10 +55,9 @@ export const TOUR_STEPS: TourStep[] = [
     title: 'Or let it repeat',
     body: [
       'Repeating schedules the same work several times: daily or weekly, with an interval and a start and end date.',
-      'The tour points at the switch — you do not have to create a repeating task to continue.',
+      'Switch to Repeating yourself if you want to see those rules — the tour never changes the mode or creates a series.',
     ],
-    anchor: '#cp-recurring-heading',
-    fallbackAnchor: '.cp-modeswitch',
+    anchor: '.cp-modetabs',
     effect: 'stagger',
   },
   {
@@ -113,10 +116,14 @@ export const TOUR_STEPS: TourStep[] = [
     body: [
       'Selecting a block shows its Where card, and suggestions for places that tend to work. A suggestion is not an assignment, not live availability and not a reservation.',
     ],
+    emptyBody: [
+      'No block is selected yet, so the Where card is still empty. Pick any block in the timeline and its Where card and suggestions appear here.',
+      'You can continue without selecting one — nothing is claimed to be shown yet.',
+    ],
+    requiresSelection: true,
     anchor: '[data-tour="where"]',
-    fallbackAnchor: '#cp-schedule-heading',
     effect: 'iris',
-    hint: 'Pick any block in the timeline to see its Where card.',
+    hint: 'Optional: pick a block to fill the Where card.',
   },
   {
     id: 'map',
@@ -135,7 +142,7 @@ export const TOUR_STEPS: TourStep[] = [
     name: 'Reservation planner',
     title: 'Plan a room, officially',
     body: [
-      'This points you to the official reservation route and the policies the app knows about. It does not check live openings and does not book or confirm anything for you.',
+      'This points you to the official reservation page and the policies the app knows about. It does not check live openings and does not book or confirm anything for you.',
     ],
     anchor: '#cp-reservation-heading',
     effect: 'iris',
@@ -146,7 +153,7 @@ export const TOUR_STEPS: TourStep[] = [
     name: 'Finished',
     title: 'That is the whole loop',
     body: [
-      'You have a personal study plan on screen. Tasks, locations and recommendations stay editable, and nothing here claims a room is available.',
+      'You have a personal study plan on screen. You can still add tasks, choose task locations and browse suggestions — and nothing here claims a room is available.',
       'Replay the tour whenever you want from the header.',
     ],
     placement: 'center',

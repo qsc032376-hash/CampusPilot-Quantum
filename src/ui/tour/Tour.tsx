@@ -45,6 +45,8 @@ function resolve(step: TourStep): Element | null {
 interface TourProps {
   /** True once a real plan exists; the build step waits for it. */
   hasPlan: boolean;
+  /** True when a study block is really selected; the Where step depends on it. */
+  hasSelection: boolean;
   /** Increment to replay the tour from the start. */
   replayKey: number;
 }
@@ -56,7 +58,7 @@ interface TourProps {
  * submits the task form and never touches plan data. Completing or skipping is
  * stored locally so a refresh does not force the tour again.
  */
-export function Tour({ hasPlan, replayKey }: TourProps) {
+export function Tour({ hasPlan, hasSelection, replayKey }: TourProps) {
   const [index, setIndex] = useState(-1);
   const [rect, setRect] = useState<Rect | null>(null);
   const [reduced, setReduced] = useState(false);
@@ -313,7 +315,7 @@ export function Tour({ hasPlan, replayKey }: TourProps) {
           {step.title}
         </h2>
         <div className="cp-tour__body" id="cp-tour-body">
-          {step.body.map((paragraph) => (
+          {(step.requiresSelection && !hasSelection && step.emptyBody ? step.emptyBody : step.body).map((paragraph) => (
             <p key={paragraph.slice(0, 24)}>{paragraph}</p>
           ))}
         </div>

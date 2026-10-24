@@ -3022,8 +3022,56 @@ async function main() {
       JSON.stringify({ progress: afterRealBuild && afterRealBuild.progress, sessions: sessionsAfterBuild }),
     );
 
-    await advanceTour(2);
+    const anchorVisible = (selector) =>
+      evaluate(`(() => {
+        const node = document.querySelector(${JSON.stringify(selector)});
+        if (!node) return null;
+        const box = node.getBoundingClientRect();
+        return {
+          top: Math.round(box.top),
+          bottom: Math.round(box.bottom),
+          visible: box.height > 0 && box.bottom > 0 && box.top < window.innerHeight,
+          covered: (() => {
+            const card = document.querySelector('#app .cp-tour__card');
+            if (!card) return false;
+            const c = card.getBoundingClientRect();
+            const overlap = Math.min(box.bottom, c.bottom) - Math.max(box.top, c.top);
+            return overlap > box.height * 0.75;
+          })(),
+        };
+      })()`);
+
+    await advanceTour(1);
+    const whereStep = await tourState();
+    const whereEmpty = await evaluate("document.querySelector('#app .cp-tour__body').textContent");
+    record(
+      'the where step admits the card is still empty without a selection',
+      whereStep !== null && /8 of 11/.test(whereStep.progress) && /No block is selected yet/.test(whereEmpty),
+      JSON.stringify({ progress: whereStep && whereStep.progress, empty: /No block is selected yet/.test(whereEmpty) }),
+    );
+
+    await evaluate("document.querySelectorAll('#app .cp-session')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const whereFilled = await evaluate(`(() => {
+      const body = document.querySelector('#app .cp-tour__body').textContent;
+      const card = document.querySelector('#app [data-tour="where"]');
+      const heading = card ? card.innerText : '';
+      return { body, headingHasWhere: /Where/.test(heading), headingHasRec: /Recommended study locations/.test(heading) };
+    })()`);
+    record(
+      'the where step follows a real selection',
+      whereFilled.headingHasWhere && whereFilled.headingHasRec && !/No block is selected yet/.test(whereFilled.body),
+      JSON.stringify({ headingHasWhere: whereFilled.headingHasWhere, headingHasRec: whereFilled.headingHasRec }),
+    );
+
+    await advanceTour(1);
     const atMap = await tourState();
+    const mapAnchor = await anchorVisible('.cp-map-mount');
+    record(
+      'the map step points at the visible map',
+      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true,
+      JSON.stringify({ progress: atMap && atMap.progress, mapAnchor }),
+    );
     const markerStability = await evaluate(`(async () => {
       const pins = [...document.querySelectorAll('#app .cp-map__pin')];
       const before = pins.map((pin) => getComputedStyle(pin).transform);
@@ -3044,7 +3092,16 @@ async function main() {
       JSON.stringify({ progress: atMap && atMap.progress, ...markerStability }),
     );
 
-    await advanceTour(2);
+    await advanceTour(1);
+    const reservationStep = await tourState();
+    const reservationAnchor = await anchorVisible('#cp-reservation-heading');
+    record(
+      'the reservation step points at the visible planner',
+      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true,
+      JSON.stringify({ progress: reservationStep && reservationStep.progress, reservationAnchor }),
+    );
+
+    await advanceTour(1);
     const lastStep = await tourState();
     record(
       'the tour ends on the finish step',
@@ -3062,6 +3119,62 @@ async function main() {
     await send('Page.reload', {});
     await new Promise((resolve) => setTimeout(resolve, 1100));
     record('a finished tour does not reopen on refresh', (await tourState()) === null, '');
+
+    // Arrow keys inside a field move the caret instead of the tour.
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) { button.focus(); button.click(); } return 'ok'; })()");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await advanceTour(1);
+    const arrowProbe = await evaluate(`(async () => {
+      const input = document.querySelector('#app form.cp-form input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'abc');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      input.setSelectionRange(2, 2);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return { before: input.selectionStart };
+    })()`);
+    await tourKey('ArrowLeft', 'ArrowLeft', 37);
+    const arrowAfter = await evaluate(`(() => {
+      const input = document.querySelector('#app form.cp-form input:not([type])');
+      const tour = document.querySelector('#app .cp-tour');
+      return {
+        caret: input.selectionStart,
+        progress: tour ? ((tour.querySelector('.cp-tour__progress') || {}).textContent || '').trim() : '',
+        focused: document.activeElement === input,
+      };
+    })()`);
+    record(
+      'arrow keys in a field move the caret, not the tour',
+      arrowAfter.focused === true && arrowAfter.caret === arrowProbe.before - 1 && /2 of 11/.test(arrowAfter.progress),
+      JSON.stringify({ ...arrowAfter, before: arrowProbe.before }),
+    );
+
+    // Narrow screens: the docked card must not cover the highlighted control.
+    await send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await advanceTour(1);
+    const narrowCover = await evaluate(`(() => {
+      const tabs = document.querySelector('#app .cp-modetabs');
+      const card = document.querySelector('#app .cp-tour__card');
+      if (!tabs || !card) return null;
+      const t = tabs.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      const overlap = Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top);
+      return {
+        progress: ((document.querySelector('#app .cp-tour__progress') || {}).textContent || '').trim(),
+        tabsTop: Math.round(t.top),
+        cardTop: Math.round(c.top),
+        covered: overlap > t.height * 0.5,
+      };
+    })()`);
+    record(
+      'the narrow card does not cover the repeating tabs',
+      narrowCover !== null && /3 of 11/.test(narrowCover.progress) && narrowCover.covered === false,
+      JSON.stringify(narrowCover),
+    );
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     // Reduced motion keeps every step but drops the movement.
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
