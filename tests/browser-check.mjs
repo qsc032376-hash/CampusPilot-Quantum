@@ -95,7 +95,7 @@ function Fixture() {
 createRoot(document.getElementById('root')).render(<Fixture />);
 `;
 
-const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="bundle.css"></head>
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="bundle.css"></head>
 <body><div id="root"></div><script type="module" src="bundle.js"></script></body></html>`;
 
 function findChrome() {
@@ -1962,24 +1962,32 @@ async function main() {
         const panel = form.querySelector('.cp-optional__panel');
         const select = form.querySelector('.cp-location-field select');
         const rows = [...form.querySelectorAll('.cp-field-row--split')];
-        const courses = rows[rows.length - 1];
-        const tracks = courses ? getComputedStyle(courses).gridTemplateColumns : '';
-        const columns = tracks ? tracks.replace(/\([^)]*\)/g, 'X').trim().split(/\s+/).length : 0;
+        const row = rows[rows.length - 1];
+        const fields = row ? [...row.querySelectorAll('.cp-field')] : [];
+        const boxes = fields.map((field) => field.getBoundingClientRect());
+        // Geometry, not CSS parsing: side by side keeps the same top row.
+        const sameRow = boxes.length >= 2 && Math.abs(boxes[0].top - boxes[1].top) <= 4;
+        const columns = boxes.length >= 2 ? (sameRow ? 2 : 1) : 0;
         const selectBox = select ? select.getBoundingClientRect() : null;
         return {
           expanded: form.querySelector('.cp-optional__toggle').getAttribute('aria-expanded'),
           panelVisible: !panel.hasAttribute('hidden') && panel.getBoundingClientRect().height > 0,
           selectVisible: !!selectBox && selectBox.width > 0 && selectBox.height > 0,
+          innerWidth: window.innerWidth,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
           columns,
         };
       })()`);
       record(
         `the expanded layout has no horizontal overflow at ${width}px`,
-        narrow.expanded === 'true' &&
+        narrow.innerWidth === width &&
+          narrow.clientWidth === width &&
+          narrow.expanded === 'true' &&
           narrow.panelVisible &&
           narrow.selectVisible &&
-          narrow.overflow <= 1 &&
+          narrow.overflow <= 0 &&
           narrow.columns === 1,
         JSON.stringify(narrow),
       );
