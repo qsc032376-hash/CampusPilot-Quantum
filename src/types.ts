@@ -6,6 +6,12 @@ export interface ClassEvent {
   end: string;
 }
 
+/** Task-level display choice only; never a booking or availability claim. */
+export type TaskLocation =
+  | { kind: 'none' }
+  | { kind: 'campus'; locationId: string }
+  | { kind: 'custom'; name: string };
+
 export interface StudyTask {
   id: string;
   title: string;
@@ -19,6 +25,8 @@ export interface StudyTask {
   /** Display metadata only; does not affect scheduling order. */
   priority?: 'low' | 'medium' | 'high';
   courseCode?: string;
+  /** Omitted/undefined: legacy default. Explicit none: never use a default. */
+  location?: TaskLocation;
 }
 
 export interface UnavailablePeriod {
@@ -34,7 +42,10 @@ export interface StudyBlock {
   title: string;
   start: string;
   end: string;
-  locationId: string;
+  /** Legacy/default or explicit campus ID; absent for none/custom. */
+  locationId?: string;
+  /** Explicit task selection; omitted for legacy tasks. */
+  location?: TaskLocation;
 }
 
 export interface CampusLocation {
