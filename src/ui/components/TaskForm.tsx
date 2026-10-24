@@ -44,6 +44,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
   const [courseCode, setCourseCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [locationDraft, setLocationDraft] = useState<LocationDraft>(() => defaultLocationDraft(request.locations));
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const fieldId = useId();
 
   const preview = parseCampusInput(due);
@@ -85,6 +86,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
     setCourseCode('');
     setChoice(null);
     setLocationDraft(defaultLocationDraft(request.locations));
+    setDetailsOpen(false);
   }
 
   return (
@@ -132,7 +134,11 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
           </label>
         </div>
 
-        <OptionalDetails summary={locationSummary(locationDraft, request.locations)}>
+        <OptionalDetails
+          summary={locationSummary(locationDraft, request.locations)}
+          open={detailsOpen || error !== null}
+          onOpenChange={setDetailsOpen}
+        >
           <TaskLocationField
             idPrefix={fieldId}
             locations={request.locations}
@@ -198,7 +204,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
         )}
 
         {error && (
-          <p className="cp-error" role="alert">
+          <p className="cp-error" role="alert" id={`${fieldId}-error`}>
             {error}
           </p>
         )}

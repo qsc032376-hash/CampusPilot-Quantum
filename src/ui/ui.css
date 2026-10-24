@@ -693,3 +693,11 @@
 .cp-optional__chevron { margin-left: auto; font-weight: 700; }
 .cp-optional__panel { padding: 10px 2px 0; }
 .cp-optional__panel[hidden] { display: none; }
+
+.cp-optional__toggle { min-width: 0; }
+.cp-optional__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

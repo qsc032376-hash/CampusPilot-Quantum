@@ -1817,6 +1817,137 @@ async function main() {
       JSON.stringify(afterDisclosureReset),
     );
 
+    // --- D QA: Never keeps the location ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      const title = form.querySelector('input:not([type])');
+      setter.call(title, 'Never keeps place');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      const frequency = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'daily'),
+      );
+      setSelect.call(frequency, 'never');
+      frequency.dispatchEvent(new Event('change', { bubbles: true }));
+      const toggle = form.querySelector('.cp-optional__toggle');
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      const location = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'campus:ohio-union'),
+      );
+      setSelect.call(location, 'campus:ohio-union');
+      location.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+      if (button) button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await evaluate(`(() => {
+      const item = [...document.querySelectorAll('#app .cp-session')].find((el) => el.textContent.includes('Never keeps place'));
+      if (item) item.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const neverWhere = await evaluate(`((document.querySelector('#app .cp-location__name') || {}).textContent || '').trim()`);
+    record('Never keeps the chosen campus location', neverWhere === 'Ohio Union', neverWhere);
+
+    // --- D QA: a submit error is visible while optional details stay collapsed ---
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate("document.querySelector('#app form.cp-form .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await evaluate("document.querySelector('#app form.cp-form .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const errorState = await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const error = form.querySelector('.cp-error');
+      const panel = form.querySelector('.cp-optional__panel');
+      const box = error ? error.getBoundingClientRect() : null;
+      const toggle = form.querySelector('.cp-optional__toggle');
+      return {
+        text: error ? error.textContent.trim() : '',
+        height: box ? box.height : 0,
+        insideHiddenPanel: panel ? panel.contains(error) : false,
+        expanded: toggle ? toggle.getAttribute('aria-expanded') : null,
+      };
+    })()`);
+    record(
+      'a submit error stays visible outside the collapsed details',
+      errorState.text.length > 0 && errorState.height > 0 && errorState.insideHiddenPanel === false,
+      JSON.stringify(errorState),
+    );
+
+    // --- D QA: a long custom name must not widen the page ---
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const toggle = form.querySelector('.cp-optional__toggle');
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'other'),
+      );
+      const setSelect = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setSelect.call(select, 'other');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const form = section.querySelector('form.cp-form');
+      const input = form.querySelector('input[id$="-location-custom"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'x'.repeat(120));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate("document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"] .cp-optional__toggle').click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const narrow = await evaluate(`(() => {
+        const summary = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"] .cp-optional__summary');
+        return {
+          summary: summary ? summary.textContent.trim() : '',
+          title: summary ? summary.getAttribute('title') : '',
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+      record(
+        `a 120-character location summary fits a ${width}px viewport`,
+        narrow.overflow <= 1 && narrow.summary.replace('Location: ', '').length > 0 && narrow.title.length >= narrow.summary.length,
+        JSON.stringify({ ...narrow, summary: narrow.summary.slice(0, 24), title: narrow.title.slice(0, 24) }),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {

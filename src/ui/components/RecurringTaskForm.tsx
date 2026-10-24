@@ -17,7 +17,8 @@ import type { SeriesDraft } from '../recurring.ts';
 import type { CampusLocation } from '../../types.ts';
 import { TaskLocationField } from './TaskLocationField.tsx';
 import { OptionalDetails } from './OptionalDetails.tsx';
-import { locationSummary } from '../taskLocationDraft.ts';
+import { buildTaskLocation, locationSummary } from '../taskLocationDraft.ts';
+import type { TaskLocation } from '../../types.ts';
 
 export interface OneOffFromSeries {
   title: string;
@@ -25,6 +26,8 @@ export interface OneOffFromSeries {
   dueAt: string;
   priority?: 'low' | 'medium' | 'high';
   courseCode?: string;
+  /** Explicit location carried over from the repeating draft; undefined only for legacy. */
+  location?: TaskLocation;
 }
 
 interface RecurringTaskFormProps {
@@ -74,6 +77,7 @@ export function RecurringTaskForm({
   const [startTouched, setStartTouched] = useState(false);
   /** Editing a series whose location is undefined keeps that legacy choice until changed. */
   const [legacyEditing, setLegacyEditing] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const fieldId = useId();
 
   // The start date follows the viewed day until the user edits it or opens a
@@ -128,12 +132,18 @@ export function RecurringTaskForm({
         setError('That day has no study window in the selected range.');
         return;
       }
+      const located = buildTaskLocation(draft.location, locations);
+      if (!located.ok) {
+        setError(located.message);
+        return;
+      }
       onAddOneOff({
         title: draft.title.trim(),
         durationMinutes: draft.durationMinutes,
         dueAt,
         ...(draft.priority ? { priority: draft.priority } : {}),
         ...(draft.courseCode.trim() ? { courseCode: draft.courseCode.trim() } : {}),
+        ...(located.location ? { location: located.location } : {}),
       });
       resetDraft();
       return;
@@ -294,7 +304,11 @@ export function RecurringTaskForm({
           </label>
         </div>
 
-        <OptionalDetails summary={locationSummary(draft.location, locations)}>
+        <OptionalDetails
+          summary={locationSummary(draft.location, locations)}
+          open={detailsOpen || error !== null}
+          onOpenChange={setDetailsOpen}
+        >
           <div className="cp-field-row cp-field-row--split">
             <label className="cp-field" htmlFor={`${fieldId}-priority`}>
             <span className="cp-field__label">Priority (optional)</span>
@@ -330,7 +344,7 @@ export function RecurringTaskForm({
         </p>
 
         {error && (
-          <p className="cp-error" role="alert">
+          <p className="cp-error" role="alert" id={`${fieldId}-error`}>
             {error}
           </p>
         )}
