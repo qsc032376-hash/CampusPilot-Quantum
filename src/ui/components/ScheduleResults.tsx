@@ -91,7 +91,7 @@ export function ScheduleResults({
     <section className="cp-panel" aria-labelledby="cp-results-heading">
       <div className="cp-panel__head">
         <h2 id="cp-results-heading">Study plan</h2>
-        <p className="cp-panel__meta">By day · earliest deadline first · all times {CAMPUS_TIME_ZONE}</p>
+        <p className="cp-panel__meta">By day · earliest deadline first</p>
       </div>
 
       <button type="button" className="cp-button cp-button--full" onClick={onBuild}>
@@ -250,10 +250,6 @@ export function ScheduleResults({
             </ul>
           )}
 
-          <p className="cp-panel__foot">
-            This is a personal study plan, not room availability or a reservation. A repeating task repeats your own
-            study block; it is not a course schedule.
-          </p>
         </div>
       )}
     </section>

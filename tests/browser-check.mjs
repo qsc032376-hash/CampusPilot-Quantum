@@ -283,9 +283,20 @@ async function main() {
     record('header follows the edited end time', editedHeader.includes('09:00–18:00'), editedHeader);
     record('the un-interpolated placeholder is gone', !editedHeader.includes('{range.endTime}'), editedHeader);
 
-    const exampleNote = await evaluate(
-      "document.querySelector('#app section[aria-labelledby=\"cp-range-heading\"] .cp-panel__foot').innerText",
-    );
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-range-heading"]');
+      const toggle = [...section.querySelectorAll('.cp-optional__toggle')].find((b) =>
+        (b.getAttribute('aria-label') || '').includes('how planning works'),
+      );
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const exampleNote = await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-range-heading"]');
+      const panel = section.querySelector('.cp-optional__panel');
+      return panel ? panel.innerText : '';
+    })()`);
     record(
       'the example note is readable and marks demo data',
       exampleNote.includes('demo data') &&
@@ -1326,7 +1337,7 @@ async function main() {
     );
     record(
       'both paces explain what they do',
-      /15-minute breaks/.test(defaultIntensity.text) && /without planned breaks/.test(defaultIntensity.text),
+      /15-minute breaks/.test(defaultIntensity.text) && !/without planned breaks/.test(defaultIntensity.text),
       defaultIntensity.text,
     );
 
@@ -1733,7 +1744,7 @@ async function main() {
         return {
           expanded: toggle.getAttribute('aria-expanded'),
           hidden: panel.hasAttribute('hidden'),
-          summary: ((toggle.querySelector('.cp-optional__summary') || {}).textContent) || '',
+          summary: ((document.querySelector('#app form.cp-form .cp-optional__summary') || {}).textContent) || '',
           customVisible: !!custom && !custom.closest('[hidden]'),
         };
       })()`);
@@ -1743,7 +1754,7 @@ async function main() {
       'optional details start collapsed with a location summary',
       collapsed.expanded === 'false' &&
         collapsed.hidden === true &&
-        collapsed.summary.trim() === 'Location: Not set' &&
+        collapsed.summary.trim() === 'Not set' &&
         collapsed.customVisible === false,
       JSON.stringify(collapsed),
     );
@@ -1771,7 +1782,7 @@ async function main() {
     const campusSummary = await optionalState();
     record(
       'the summary shows the chosen campus place',
-      campusSummary.summary.trim() === 'Location: Ohio Union',
+      campusSummary.summary.trim() === 'Ohio Union',
       JSON.stringify(campusSummary),
     );
 
@@ -1789,7 +1800,7 @@ async function main() {
     const customState = await optionalState();
     record(
       'the custom name field appears only for Other',
-      customState.customVisible === true && customState.summary.trim() === 'Location: Not set',
+      customState.customVisible === true && customState.summary.trim() === 'Not set',
       JSON.stringify(customState),
     );
 
@@ -1812,7 +1823,7 @@ async function main() {
       'reset collapses the disclosure and clears the location',
       afterDisclosureReset.expanded === 'false' &&
         afterDisclosureReset.hidden === true &&
-        afterDisclosureReset.summary.trim() === 'Location: Not set' &&
+        afterDisclosureReset.summary.trim() === 'Not set' &&
         afterDisclosureReset.customVisible === false,
       JSON.stringify(afterDisclosureReset),
     );
@@ -1941,7 +1952,7 @@ async function main() {
       })()`);
       record(
         `a 120-character location summary fits a ${width}px viewport`,
-        narrow.overflow <= 1 && narrow.summary.replace('Location: ', '').length > 0 && narrow.title.length >= narrow.summary.length,
+        narrow.overflow <= 1 && narrow.summary.length > 0 && narrow.title.length > narrow.summary.length,
         JSON.stringify({ ...narrow, summary: narrow.summary.slice(0, 24), title: narrow.title.slice(0, 24) }),
       );
     }
@@ -2228,6 +2239,136 @@ async function main() {
         qaStaleAfterFix.errorText === '',
       JSON.stringify({ before: fixedBeforeSubmit, after: qaStaleAfterFix }),
     );
+
+    // --- simplified layout ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const headerSummary = await evaluate(`(() => {
+      const header = document.querySelector('#app .cp-header');
+      return {
+        text: header ? header.innerText : '',
+        example: !!document.querySelector('#app .cp-example-tag'),
+        placesListed: ['18th Avenue Library', 'Thompson Library', 'Ohio Union'].filter((name) =>
+          (header ? header.innerText : '').includes(name),
+        ).length,
+      };
+    })()`);
+    record(
+      'the header is one compact summary with an example tag',
+      /\d{1,2}:\d{2}–\d{1,2}:\d{2} ET/.test(headerSummary.text) &&
+        /·/.test(headerSummary.text) &&
+        headerSummary.example === true &&
+        headerSummary.placesListed === 0,
+      JSON.stringify({ ...headerSummary, text: headerSummary.text.slice(0, 120) }),
+    );
+
+    const howSection = () =>
+      evaluate(`(() => {
+        const panel = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+          (b.getAttribute('aria-label') || '').includes('how planning works'),
+        );
+        if (!panel) return null;
+        const content = panel.closest('.cp-optional').querySelector('.cp-optional__panel');
+        return {
+          expanded: panel.getAttribute('aria-expanded'),
+          hidden: content.hasAttribute('hidden'),
+          text: content.innerText.trim(),
+          label: panel.getAttribute('aria-label'),
+        };
+      })()`);
+    await evaluate(`(() => {
+      const toggle = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+        (b.getAttribute('aria-label') || '').includes('how planning works'),
+      );
+      if (toggle && toggle.getAttribute('aria-expanded') === 'true') toggle.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const howCollapsed = await howSection();
+    record(
+      'How planning works starts collapsed',
+      howCollapsed && howCollapsed.expanded === 'false' && howCollapsed.hidden === true,
+      JSON.stringify(howCollapsed && { expanded: howCollapsed.expanded, hidden: howCollapsed.hidden }),
+    );
+    await evaluate(`[...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+      (b.getAttribute('aria-label') || '').includes('how planning works')).click()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const howOpen = await howSection();
+    record(
+      'How planning works opens with readable text',
+      howOpen && howOpen.expanded === 'true' && howOpen.text.length > 40 && /demo data/i.test(howOpen.text),
+      JSON.stringify(howOpen && { expanded: howOpen.expanded, text: howOpen.text.slice(0, 80) }),
+    );
+
+    const paceText = () =>
+      evaluate(`(() => {
+        const panel = document.querySelector('#app section[aria-labelledby="cp-range-heading"] .cp-intensity');
+        return panel ? panel.innerText : '';
+      })()`);
+    const relaxedText = await paceText();
+    await clickButton('High intensity');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const intenseText = await paceText();
+    record(
+      'the pace area describes only the selected mode',
+      /15-minute breaks/.test(relaxedText) &&
+        !/without planned breaks/i.test(relaxedText) &&
+        /without planned breaks/i.test(intenseText) &&
+        !/15-minute breaks/.test(intenseText),
+      JSON.stringify({ relaxedText, intenseText }),
+    );
+
+    await clickButton('Relaxed');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const disclosureLayout = await evaluate(`(() => {
+      const row = document.querySelector('#app form.cp-form .cp-optional__row');
+      const toggle = row.querySelector('.cp-optional__toggle');
+      const summary = row.querySelector('.cp-optional__summary');
+      const buttonBox = toggle.getBoundingClientRect();
+      const summaryBox = summary.getBoundingClientRect();
+      const select = document.querySelector('#app form.cp-form .cp-location-field select');
+      const panel = document.querySelector('#app form.cp-form .cp-optional__panel');
+      return {
+        buttonOutside: !summary.contains(toggle),
+        buttonRight: buttonBox.left >= summaryBox.right - 1,
+        buttonSize: Math.round(buttonBox.width) >= 24 && Math.round(buttonBox.height) >= 24,
+        ariaExpanded: toggle.getAttribute('aria-expanded'),
+        hasControls: !!toggle.getAttribute('aria-controls'),
+        selectFullWidth: select ? Math.round(select.getBoundingClientRect().width) >= Math.round(panel.getBoundingClientRect().width) - 2 : false,
+      };
+    })()`);
+    record(
+      'Optional details keeps a separate expand button and a full-width location select',
+      disclosureLayout.buttonOutside &&
+        disclosureLayout.buttonRight &&
+        disclosureLayout.buttonSize &&
+        disclosureLayout.hasControls &&
+        disclosureLayout.selectFullWidth,
+      JSON.stringify(disclosureLayout),
+    );
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const narrow = await evaluate(`(() => {
+        const row = document.querySelector('#app form.cp-form .cp-optional__row');
+        const courses = [...document.querySelectorAll('#app form.cp-form .cp-field-row--split')].pop();
+        const tracks = courses ? getComputedStyle(courses).gridTemplateColumns : '';
+        const columns = tracks ? tracks.replace(/\([^)]*\)/g, 'X').trim().split(/\s+/).length : 0;
+        return {
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          summaryWidth: Math.round(row.querySelector('.cp-optional__summary').getBoundingClientRect().width),
+          columns,
+        };
+      })()`);
+      record(
+        `the page has no horizontal overflow at ${width}px`,
+        narrow.overflow <= 1 && narrow.summaryWidth > 0 && narrow.columns === 1,
+        JSON.stringify(narrow),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");

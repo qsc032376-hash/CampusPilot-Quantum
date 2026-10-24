@@ -8,6 +8,7 @@ import { TaskForm } from './components/TaskForm.tsx';
 import type { TaskDraft } from './components/TaskForm.tsx';
 import { RecurringTaskForm } from './components/RecurringTaskForm.tsx';
 import { TaskModeSwitch } from './components/TaskModeSwitch.tsx';
+import { OptionalDetails } from './components/OptionalDetails.tsx';
 import { ScheduleIntensitySwitch } from './components/ScheduleIntensitySwitch.tsx';
 import type { ScheduleIntensity } from '../features/schedule-intensity/index.ts';
 import type { TaskMode } from './components/TaskModeSwitch.tsx';
@@ -74,6 +75,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [taskMode, setTaskMode] = useState<TaskMode>('oneoff');
   /** Planning pace; every entry that plans must pass this value through. */
   const [intensity, setIntensity] = useState<ScheduleIntensity>('relaxed');
+  const [howOpen, setHowOpen] = useState(false);
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -286,6 +288,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setHasBuilt(false);
     // Reset also returns to the default one-time task mode and pace.
     setTaskMode('oneoff');
+    setHowOpen(false);
     setIntensity('relaxed');
     setSeriesFormKey((current) => current + 1);
   }
@@ -301,8 +304,17 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const canGoPrevious = dayIndex > 0;
   const canGoNext = dayIndex >= 0 && dayIndex < dayDates.length - 1;
 
+  const shortDay = (iso: string) => formatDay(iso).replace(/^[A-Za-z]+, /, '').replace(/, \d{4}$/, '');
+  const daySpan = () => {
+    if (!preview.windows[0]) return '';
+    const first = shortDay(preview.windows[0].windowStart);
+    const last = shortDay(preview.windows[preview.windows.length - 1].windowStart);
+    const [firstMonth, firstDay] = first.split(' ');
+    const [lastMonth, lastDay] = last.split(' ');
+    return firstMonth === lastMonth ? `${firstMonth.slice(0, 3)} ${firstDay}–${lastDay}` : `${firstMonth.slice(0, 3)} ${firstDay}–${lastMonth.slice(0, 3)} ${lastDay}`;
+  };
   const rangeLabel = preview.windows[0]
-    ? `${rangeDayCountLabel(range)} from ${formatDay(preview.windows[0].windowStart)} · ${range.startTime}–${range.endTime} ${CAMPUS_TIME_ZONE}`
+    ? `${daySpan()} · ${rangeDayCountLabel(range)} · ${range.startTime}–${range.endTime} ET`
     : `${range.startDate} · ${range.startTime}–${range.endTime}`;
 
   const selectedBlock = multi?.result.blocks.find((block) => block.id === selectedId) ?? null;
@@ -455,11 +467,18 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
             <ScheduleIntensitySwitch intensity={intensity} onChange={handleIntensityChange} />
 
-            <p className="cp-panel__foot">
-              Switching the viewed day does not re-run the planner. Changing the range, the task list or a repeating
-              series does. Events labelled “Example · ” are demo data, not real courses, and they say nothing about room
-              availability.
-            </p>
+            <OptionalDetails
+              label="How planning works"
+              summary="Replanning, demo data and availability"
+              open={howOpen}
+              onOpenChange={setHowOpen}
+            >
+              <p className="cp-hint">
+                Viewing another day never re-runs the planner; changing the range, the task list, a repeating series or the
+                pace does. Tasks labelled “Example · ” are demo data, not real courses, and this plan does not mean a place is
+                open, a room is available or a booking exists.
+              </p>
+            </OptionalDetails>
           </section>
 
           <WeeklySchedule

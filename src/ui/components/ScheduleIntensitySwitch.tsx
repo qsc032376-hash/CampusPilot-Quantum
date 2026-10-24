@@ -37,10 +37,10 @@ export function ScheduleIntensitySwitch({ intensity, onChange }: ScheduleIntensi
         </button>
       </div>
       <p className="cp-hint">
-        <strong>Relaxed</strong> aims for 15-minute breaks; breaks may be shortened when needed to fit tasks.{' '}
-        <strong>High intensity</strong> schedules without planned breaks.
+        {intensity === 'relaxed'
+          ? 'Aims for 15-minute breaks; breaks may be shortened to fit tasks.'
+          : 'Schedules without planned breaks.'}
       </p>
-      <p className="cp-hint">Study pace only: not room availability, a reservation or a guarantee that every task fits.</p>
     </div>
   );
 }
