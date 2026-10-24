@@ -17,7 +17,7 @@ import type { SeriesDraft } from '../recurring.ts';
 import type { CampusLocation } from '../../types.ts';
 import { TaskLocationField } from './TaskLocationField.tsx';
 import { OptionalDetails } from './OptionalDetails.tsx';
-import { buildTaskLocation, locationSummary } from '../taskLocationDraft.ts';
+import { buildTaskLocation, locationFullSummary, locationSummary } from '../taskLocationDraft.ts';
 import type { TaskLocation } from '../../types.ts';
 
 export interface OneOffFromSeries {
@@ -317,6 +317,7 @@ export function RecurringTaskForm({
 
         <OptionalDetails
           summary={locationSummary(draft.location, locations)}
+          fullSummary={locationFullSummary(draft.location, locations)}
           open={detailsOpen || error !== null}
           onOpenChange={setDetailsOpen}
         >

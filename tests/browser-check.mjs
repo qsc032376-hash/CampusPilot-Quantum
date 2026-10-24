@@ -95,7 +95,7 @@ function Fixture() {
 createRoot(document.getElementById('root')).render(<Fixture />);
 `;
 
-const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="bundle.css"></head>
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="bundle.css"></head>
 <body><div id="root"></div><script type="module" src="bundle.js"></script></body></html>`;
 
 function findChrome() {
@@ -283,9 +283,20 @@ async function main() {
     record('header follows the edited end time', editedHeader.includes('09:00–18:00'), editedHeader);
     record('the un-interpolated placeholder is gone', !editedHeader.includes('{range.endTime}'), editedHeader);
 
-    const exampleNote = await evaluate(
-      "document.querySelector('#app section[aria-labelledby=\"cp-range-heading\"] .cp-panel__foot').innerText",
-    );
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-range-heading"]');
+      const toggle = [...section.querySelectorAll('.cp-optional__toggle')].find((b) =>
+        (b.getAttribute('aria-label') || '').includes('how planning works'),
+      );
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const exampleNote = await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-range-heading"]');
+      const panel = section.querySelector('.cp-optional__panel');
+      return panel ? panel.innerText : '';
+    })()`);
     record(
       'the example note is readable and marks demo data',
       exampleNote.includes('demo data') &&
@@ -1326,7 +1337,7 @@ async function main() {
     );
     record(
       'both paces explain what they do',
-      /15-minute breaks/.test(defaultIntensity.text) && /without planned breaks/.test(defaultIntensity.text),
+      /15-minute breaks/.test(defaultIntensity.text) && !/without planned breaks/.test(defaultIntensity.text),
       defaultIntensity.text,
     );
 
@@ -1733,7 +1744,7 @@ async function main() {
         return {
           expanded: toggle.getAttribute('aria-expanded'),
           hidden: panel.hasAttribute('hidden'),
-          summary: ((toggle.querySelector('.cp-optional__summary') || {}).textContent) || '',
+          summary: ((document.querySelector('#app form.cp-form .cp-optional__summary') || {}).textContent) || '',
           customVisible: !!custom && !custom.closest('[hidden]'),
         };
       })()`);
@@ -1743,7 +1754,7 @@ async function main() {
       'optional details start collapsed with a location summary',
       collapsed.expanded === 'false' &&
         collapsed.hidden === true &&
-        collapsed.summary.trim() === 'Location: Not set' &&
+        collapsed.summary.trim() === 'Not set' &&
         collapsed.customVisible === false,
       JSON.stringify(collapsed),
     );
@@ -1771,7 +1782,7 @@ async function main() {
     const campusSummary = await optionalState();
     record(
       'the summary shows the chosen campus place',
-      campusSummary.summary.trim() === 'Location: Ohio Union',
+      campusSummary.summary.trim() === 'Ohio Union',
       JSON.stringify(campusSummary),
     );
 
@@ -1789,7 +1800,7 @@ async function main() {
     const customState = await optionalState();
     record(
       'the custom name field appears only for Other',
-      customState.customVisible === true && customState.summary.trim() === 'Location: Not set',
+      customState.customVisible === true && customState.summary.trim() === 'Not set',
       JSON.stringify(customState),
     );
 
@@ -1812,7 +1823,7 @@ async function main() {
       'reset collapses the disclosure and clears the location',
       afterDisclosureReset.expanded === 'false' &&
         afterDisclosureReset.hidden === true &&
-        afterDisclosureReset.summary.trim() === 'Location: Not set' &&
+        afterDisclosureReset.summary.trim() === 'Not set' &&
         afterDisclosureReset.customVisible === false,
       JSON.stringify(afterDisclosureReset),
     );
@@ -1928,21 +1939,97 @@ async function main() {
     await evaluate("document.querySelector('#app section[aria-labelledby=\"cp-recurring-heading\"] .cp-optional__toggle').click()");
     await new Promise((resolve) => setTimeout(resolve, 250));
 
+    // The long custom name must not widen the page and must stay readable.
     for (const width of [320, 375]) {
-      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: true });
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      const narrow = await evaluate(`(() => {
-        const summary = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"] .cp-optional__summary');
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const longName = await evaluate(`(() => {
+        const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+        const row = section.querySelector('.cp-optional__row');
+        const toggle = section.querySelector('.cp-optional__toggle');
+        const summary = section.querySelector('.cp-optional__summary');
+        const panel = section.querySelector('.cp-optional__panel');
+        const box = summary ? summary.getBoundingClientRect() : null;
         return {
+          width: window.innerWidth,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          expanded: toggle ? toggle.getAttribute('aria-expanded') : null,
+          panelHidden: panel ? panel.hasAttribute('hidden') : null,
           summary: summary ? summary.textContent.trim() : '',
           title: summary ? summary.getAttribute('title') : '',
-          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          summaryWidth: box ? Math.round(box.width) : 0,
+          rowWidth: row ? Math.round(row.getBoundingClientRect().width) : 0,
         };
       })()`);
       record(
-        `a 120-character location summary fits a ${width}px viewport`,
-        narrow.overflow <= 1 && narrow.summary.replace('Location: ', '').length > 0 && narrow.title.length >= narrow.summary.length,
-        JSON.stringify({ ...narrow, summary: narrow.summary.slice(0, 24), title: narrow.title.slice(0, 24) }),
+        `a 120-character place name keeps the repeating summary compact at ${width}px`,
+        longName.width === width &&
+          longName.clientWidth === width &&
+          longName.scrollWidth === width &&
+          longName.expanded === 'false' &&
+          longName.panelHidden === true &&
+          longName.summary === 'Custom location set' &&
+          longName.title.length === 120 &&
+          longName.summaryWidth > 0 &&
+          longName.summaryWidth <= longName.rowWidth,
+        JSON.stringify({ ...longName, title: longName.title.slice(0, 8) + '…(' + longName.title.length + ')' }),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await evaluate(`(() => {
+        const pane = document.querySelector('#app .cp-task-pane');
+        if (pane && pane.hasAttribute('hidden')) {
+          const tab = [...document.querySelectorAll('#app .cp-modetab')].find((b) => b.textContent.includes('One-time'));
+          if (tab) tab.click();
+        }
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await evaluate(`(() => {
+        const toggle = document.querySelector('#app form.cp-form .cp-optional__toggle');
+        if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+        return 'ok';
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const narrow = await evaluate(`(() => {
+        const form = document.querySelector('#app form.cp-form');
+        const panel = form.querySelector('.cp-optional__panel');
+        const select = form.querySelector('.cp-location-field select');
+        const rows = [...form.querySelectorAll('.cp-field-row--split')];
+        const row = rows[rows.length - 1];
+        const fields = row ? [...row.querySelectorAll('.cp-field')] : [];
+        const boxes = fields.map((field) => field.getBoundingClientRect());
+        // Geometry, not CSS parsing: side by side keeps the same top row.
+        const sameRow = boxes.length >= 2 && Math.abs(boxes[0].top - boxes[1].top) <= 4;
+        const columns = boxes.length >= 2 ? (sameRow ? 2 : 1) : 0;
+        const selectBox = select ? select.getBoundingClientRect() : null;
+        return {
+          expanded: form.querySelector('.cp-optional__toggle').getAttribute('aria-expanded'),
+          panelVisible: !panel.hasAttribute('hidden') && panel.getBoundingClientRect().height > 0,
+          selectVisible: !!selectBox && selectBox.width > 0 && selectBox.height > 0,
+          innerWidth: window.innerWidth,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          columns,
+        };
+      })()`);
+      record(
+        `the expanded layout has no horizontal overflow at ${width}px`,
+        narrow.innerWidth === width &&
+          narrow.clientWidth === width &&
+          narrow.expanded === 'true' &&
+          narrow.panelVisible &&
+          narrow.selectVisible &&
+          narrow.overflow <= 0 &&
+          narrow.columns === 1,
+        JSON.stringify(narrow),
       );
     }
     await send('Emulation.clearDeviceMetricsOverride', {});
@@ -2227,6 +2314,305 @@ async function main() {
         !qaStaleAfterFix.describedBy &&
         qaStaleAfterFix.errorText === '',
       JSON.stringify({ before: fixedBeforeSubmit, after: qaStaleAfterFix }),
+    );
+
+    // --- simplified layout ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const headerSummary = await evaluate(`(() => {
+      const header = document.querySelector('#app .cp-header');
+      return {
+        text: header ? header.innerText : '',
+        example: !!document.querySelector('#app .cp-example-tag'),
+        placesListed: ['18th Avenue Library', 'Thompson Library', 'Ohio Union'].filter((name) =>
+          (header ? header.innerText : '').includes(name),
+        ).length,
+      };
+    })()`);
+    record(
+      'the header is one compact summary with an example tag',
+      /\d{1,2}:\d{2}–\d{1,2}:\d{2} ET/.test(headerSummary.text) &&
+        /·/.test(headerSummary.text) &&
+        headerSummary.example === true &&
+        headerSummary.placesListed === 0,
+      JSON.stringify({ ...headerSummary, text: headerSummary.text.slice(0, 120) }),
+    );
+
+    const howSection = () =>
+      evaluate(`(() => {
+        const panel = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+          (b.getAttribute('aria-label') || '').includes('how planning works'),
+        );
+        if (!panel) return null;
+        const content = panel.closest('.cp-optional').querySelector('.cp-optional__panel');
+        return {
+          expanded: panel.getAttribute('aria-expanded'),
+          hidden: content.hasAttribute('hidden'),
+          text: content.innerText.trim(),
+          label: panel.getAttribute('aria-label'),
+        };
+      })()`);
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const howDefault = await howSection();
+    record(
+      'How planning works starts collapsed after reset',
+      howDefault && howDefault.expanded === 'false' && howDefault.hidden === true,
+      JSON.stringify(howDefault && { expanded: howDefault.expanded, hidden: howDefault.hidden }),
+    );
+
+    await evaluate(`[...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+      (b.getAttribute('aria-label') || '').includes('how planning works')).click()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const howOpen = await howSection();
+    record(
+      'How planning works opens with readable text',
+      howOpen && howOpen.expanded === 'true' && howOpen.text.length > 40 && /demo data/i.test(howOpen.text),
+      JSON.stringify(howOpen && { expanded: howOpen.expanded, text: howOpen.text.slice(0, 80) }),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const howReset = await howSection();
+    record(
+      'reset collapses How planning works again',
+      howReset && howReset.expanded === 'false' && howReset.hidden === true,
+      JSON.stringify(howReset && { expanded: howReset.expanded }),
+    );
+
+    const paceText = () =>
+      evaluate(`(() => {
+        const panel = document.querySelector('#app section[aria-labelledby="cp-range-heading"] .cp-intensity');
+        return panel ? panel.innerText : '';
+      })()`);
+    const relaxedText = await paceText();
+    await clickButton('High intensity');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const intenseText = await paceText();
+    record(
+      'the pace area describes only the selected mode',
+      /15-minute breaks/.test(relaxedText) &&
+        !/without planned breaks/i.test(relaxedText) &&
+        /without planned breaks/i.test(intenseText) &&
+        !/15-minute breaks/.test(intenseText),
+      JSON.stringify({ relaxedText, intenseText }),
+    );
+
+    await clickButton('Relaxed');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const toggle = document.querySelector('#app form.cp-form .cp-optional__toggle');
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const disclosureLayout = await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const row = form.querySelector('.cp-optional__row');
+      const toggle = row.querySelector('.cp-optional__toggle');
+      const summary = row.querySelector('.cp-optional__summary');
+      const panel = form.querySelector('.cp-optional__panel');
+      const select = form.querySelector('.cp-location-field select');
+      const buttonBox = toggle.getBoundingClientRect();
+      const summaryBox = summary.getBoundingClientRect();
+      const panelBox = panel.getBoundingClientRect();
+      const selectBox = select ? select.getBoundingClientRect() : null;
+      return {
+        expanded: toggle.getAttribute('aria-expanded'),
+        panelVisible: !panel.hasAttribute('hidden') && panelBox.width > 0 && panelBox.height > 0,
+        selectVisible: !!selectBox && selectBox.width > 0 && selectBox.height > 0,
+        buttonOutside: !summary.contains(toggle),
+        buttonRight: buttonBox.left >= summaryBox.right - 1,
+        buttonSize: Math.round(buttonBox.width) >= 24 && Math.round(buttonBox.height) >= 24,
+        hasControls: !!toggle.getAttribute('aria-controls'),
+        selectFullWidth:
+          !!selectBox && Math.round(selectBox.width) >= Math.round(select.parentElement.getBoundingClientRect().width) - 1,
+      };
+    })()`);
+    record(
+      'Optional details keeps a separate expand button and a full-width location select',
+      disclosureLayout.expanded === 'true' &&
+        disclosureLayout.panelVisible &&
+        disclosureLayout.selectVisible &&
+        disclosureLayout.buttonOutside &&
+        disclosureLayout.buttonRight &&
+        disclosureLayout.buttonSize &&
+        disclosureLayout.hasControls &&
+        disclosureLayout.selectFullWidth,
+      JSON.stringify(disclosureLayout),
+    );
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 820, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const narrow = await evaluate(`(() => {
+        const row = document.querySelector('#app form.cp-form .cp-optional__row');
+        const courses = [...document.querySelectorAll('#app form.cp-form .cp-field-row--split')].pop();
+        const tracks = courses ? getComputedStyle(courses).gridTemplateColumns : '';
+        const columns = tracks ? tracks.replace(/\([^)]*\)/g, 'X').trim().split(/\s+/).length : 0;
+        return {
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          summaryWidth: Math.round(row.querySelector('.cp-optional__summary').getBoundingClientRect().width),
+          columns,
+        };
+      })()`);
+      record(
+        `the page has no horizontal overflow at ${width}px`,
+        narrow.overflow <= 1 && narrow.summaryWidth > 0 && narrow.columns === 1,
+        JSON.stringify(narrow),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // --- D QA: the availability caveat is always visible, browsing keeps the selection ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+      if (button) button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    const caveat = await evaluate(`(() => {
+      const note = document.querySelector('#app .cp-caveat');
+      const box = note ? note.getBoundingClientRect() : null;
+      const help = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+        (b.getAttribute('aria-label') || '').includes('how planning works'),
+      );
+      return {
+        text: note ? note.textContent.trim() : '',
+        visible: !!box && box.height > 0 && box.width > 0,
+        helpExpanded: help ? help.getAttribute('aria-expanded') : null,
+        selected: document.querySelectorAll('#app .cp-session.is-selected').length,
+      };
+    })()`);
+    for (const [width, height] of [[320, 800], [375, 812]]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      // First screen means the page as loaded, so measure from the document top.
+      await evaluate("document.querySelector('#app').scrollIntoView({ block: 'start' })");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const firstScreen = await evaluate(`(() => {
+        const note = document.querySelector('#app .cp-caveat');
+        const box = note ? note.getBoundingClientRect() : null;
+        const help = [...document.querySelectorAll('#app .cp-optional__toggle')].find((b) =>
+          (b.getAttribute('aria-label') || '').includes('how planning works'),
+        );
+        const header = document.querySelector('#app .cp-header');
+        const app = document.querySelector('#app');
+        return {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          clientWidth: document.documentElement.clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          top: box ? Math.round(box.top) : null,
+          bottom: box ? Math.round(box.bottom) : null,
+          visible: !!box && box.height > 0 && box.width > 0,
+          inFirstScreen: !!box && box.top >= 0 && box.bottom <= window.innerHeight,
+          aboveMain: (() => {
+            const main = document.querySelector('#app .cp-main');
+            return !!(note && main && (note.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING));
+          })(),
+          helpExpanded: help ? help.getAttribute('aria-expanded') : null,
+          selected: document.querySelectorAll('#app .cp-session.is-selected').length,
+          headerVisible: !!header && header.getBoundingClientRect().height > 0,
+          appOffset: app && box ? Math.round(box.top - app.getBoundingClientRect().top) : null,
+          headerHeight: header ? Math.round(header.getBoundingClientRect().height) : 0,
+          titleHeight: (() => {
+            const title = document.querySelector('#app .cp-header__title');
+            return title ? Math.round(title.getBoundingClientRect().height) : 0;
+          })(),
+          titleFont: (() => {
+            const title = document.querySelector('#app .cp-header__title');
+            return title ? getComputedStyle(title).fontSize : '';
+          })(),
+          statsTop: (() => {
+            const stats = document.querySelector('#app .cp-stats');
+            return stats ? Math.round(stats.getBoundingClientRect().top) : null;
+          })(),
+        };
+      })()`);
+      record(
+        `the availability caveat is in the first screen at ${width}x${height}`,
+        firstScreen.width === width &&
+          firstScreen.height === height &&
+          firstScreen.clientWidth === width &&
+          firstScreen.scrollWidth === width &&
+          firstScreen.visible &&
+          firstScreen.inFirstScreen &&
+          firstScreen.aboveMain &&
+          firstScreen.appOffset !== null &&
+          firstScreen.appOffset >= 0 &&
+          firstScreen.appOffset < 500 &&
+          firstScreen.headerVisible &&
+          firstScreen.helpExpanded === 'false' &&
+          firstScreen.selected === 0,
+        JSON.stringify(firstScreen),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    record(
+      'the availability caveat stays visible while the help block is collapsed',
+      caveat.visible &&
+        /does not mean a place is open/i.test(caveat.text) &&
+        caveat.helpExpanded === 'false' &&
+        caveat.selected === 0,
+      JSON.stringify(caveat),
+    );
+
+    const browseState = () =>
+      evaluate(`(() => ({
+        runs: document.querySelector('#app .cp-app').getAttribute('data-plan-runs'),
+        nav: ((document.querySelector('#app .cp-daynav__label') || {}).textContent || '').trim(),
+        where: ((document.querySelector('#app .cp-location__name') || {}).textContent || '').trim(),
+        selected: document.querySelectorAll('#app .cp-session.is-selected').length,
+      }))()`);
+
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-19');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => /build plan/i.test(b.textContent));
+      if (button) button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    record(
+      'the browse case has a plan to select from',
+      (await evaluate("document.querySelectorAll('#app .cp-session').length")) > 0,
+      '',
+    );
+    await evaluate("document.querySelectorAll('#app .cp-session')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const beforeBrowse = await browseState();
+    await evaluate("[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Next day')).click()");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const afterBrowse = await browseState();
+
+    record(
+      'browsing another day does not re-run the planner',
+      Number(afterBrowse.runs) === Number(beforeBrowse.runs),
+      JSON.stringify({ before: beforeBrowse.runs, after: afterBrowse.runs }),
+    );
+    record(
+      'browsing another day keeps the selected block and its details',
+      beforeBrowse.selected === 1 &&
+        afterBrowse.selected === 1 &&
+        afterBrowse.where === beforeBrowse.where &&
+        afterBrowse.where.length > 0 &&
+        afterBrowse.nav !== beforeBrowse.nav,
+      JSON.stringify({ before: beforeBrowse, after: afterBrowse }),
     );
 
     // --- campus map ---

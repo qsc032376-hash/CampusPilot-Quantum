@@ -49,7 +49,7 @@ export function TaskLocationField({
   }
 
   return (
-    <div className="cp-field-row cp-field-row--split">
+    <div className="cp-location-field">
       <label className="cp-field" htmlFor={selectId}>
         <span className="cp-field__label">Location</span>
         <select id={selectId} className="cp-input" value={value} onChange={(event) => handleSelect(event.target.value)}>
@@ -66,7 +66,11 @@ export function TaskLocationField({
         </select>
       </label>
 
-      {draft.choice === 'custom' ? (
+      <p className="cp-hint cp-location-field__note">
+        Task metadata only. It never claims a place is open, has space or is booked.
+      </p>
+
+      {draft.choice === 'custom' && (
         <label className="cp-field" htmlFor={customId}>
           <span className="cp-field__label">Custom location</span>
           <input
@@ -81,8 +85,6 @@ export function TaskLocationField({
             onChange={(event) => onChange({ ...draft, customName: event.target.value })}
           />
         </label>
-      ) : (
-        <p className="cp-field__hint">Shown with the task only; never a booking.</p>
       )}
     </div>
   );

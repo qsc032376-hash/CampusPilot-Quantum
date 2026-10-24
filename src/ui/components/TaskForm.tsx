@@ -12,7 +12,7 @@ import {
 import type { PendingChoice, TaskDraft } from '../taskValidation.ts';
 import { TaskLocationField } from './TaskLocationField.tsx';
 import { OptionalDetails } from './OptionalDetails.tsx';
-import { buildTaskLocation, defaultLocationDraft, locationSummary } from '../taskLocationDraft.ts';
+import { buildTaskLocation, defaultLocationDraft, locationFullSummary, locationSummary } from '../taskLocationDraft.ts';
 import type { LocationDraft } from '../taskLocationDraft.ts';
 
 export type { TaskDraft } from '../taskValidation.ts';
@@ -137,7 +137,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
           </label>
 
           <label className="cp-field">
-            <span className="cp-field__label">Due ({CAMPUS_TIME_ZONE})</span>
+            <span className="cp-field__label">Due (Eastern Time)</span>
             <input
               className="cp-input"
               type="datetime-local"
@@ -149,6 +149,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
 
         <OptionalDetails
           summary={locationSummary(locationDraft, request.locations)}
+          fullSummary={locationFullSummary(locationDraft, request.locations)}
           open={detailsOpen || error !== null}
           onOpenChange={setDetailsOpen}
         >
@@ -211,10 +212,6 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
               ))}
             </select>
           </label>
-        )}
-
-        {preview.status === 'ok' && (
-          <p className="cp-hint">Deadline resolves to {formatDateTimeWithZone(preview.iso)}.</p>
         )}
 
         {preview.status === 'nonexistent' && (

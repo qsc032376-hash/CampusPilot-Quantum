@@ -22,10 +22,11 @@ export function AppHeader({ request, result, rangeLabel, onReset }: AppHeaderPro
         <p className="cp-brand">CP / CAMPUSPILOT</p>
         <h1 className="cp-header__title">Make room for your next study session.</h1>
         <p className="cp-header__meta">
-          {rangeLabel} · all times {CAMPUS_TIME_ZONE}
+          {rangeLabel}
+          <span className="cp-example-tag">Example data</span>
         </p>
-        <p className="cp-header__meta">
-          {request.locations.map((location) => location.name).join(' · ')}
+        <p className="cp-caveat">
+          A plan does not mean a place is open, a room is available or a booking exists.
         </p>
       </div>
 
