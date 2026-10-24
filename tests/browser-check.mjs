@@ -2865,6 +2865,34 @@ async function main() {
       }
       return false;
     };
+    await evaluate(`(() => {
+      window.__cpGeom = (target, card) => {
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const t = target.getBoundingClientRect();
+        const visible =
+          Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0;
+        let overlap = 0;
+        let cardRect = null;
+        if (card) {
+          const c = card.getBoundingClientRect();
+          cardRect = { left: Math.round(c.left), top: Math.round(c.top), right: Math.round(c.right), bottom: Math.round(c.bottom) };
+          const w = Math.min(t.right, c.right) - Math.max(t.left, c.left);
+          const h = Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top);
+          overlap = w > 0 && h > 0 ? Math.round(w * h) : 0;
+        }
+        return {
+          visible,
+          overlap,
+          viewport: { vw, vh },
+          rect: { left: Math.round(t.left), top: Math.round(t.top), right: Math.round(t.right), bottom: Math.round(t.bottom) },
+          card: cardRect,
+          scrollY: Math.round(window.scrollY),
+        };
+      };
+      return true;
+    })()`);
+
     const tourState = () =>
       evaluate(`(() => {
         const tour = document.querySelector('#app .cp-tour');
@@ -3125,18 +3153,19 @@ async function main() {
       evaluate(`(() => {
         const node = document.querySelector(${JSON.stringify(selector)});
         if (!node) return null;
-        const box = node.getBoundingClientRect();
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const t = node.getBoundingClientRect();
+        const card = document.querySelector('#app .cp-tour__card');
+        const c = card ? card.getBoundingClientRect() : null;
+        const w = c ? Math.min(t.right, c.right) - Math.max(t.left, c.left) : 0;
+        const h = c ? Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top) : 0;
         return {
-          top: Math.round(box.top),
-          bottom: Math.round(box.bottom),
-          visible: box.height > 0 && box.bottom > 0 && box.top < window.innerHeight,
-          covered: (() => {
-            const card = document.querySelector('#app .cp-tour__card');
-            if (!card) return false;
-            const c = card.getBoundingClientRect();
-            const overlap = Math.min(box.bottom, c.bottom) - Math.max(box.top, c.top);
-            return overlap > box.height * 0.75;
-          })(),
+          visible: Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0,
+          overlap: w > 0 && h > 0 ? Math.round(w * h) : 0,
+          viewport: { vw, vh },
+          rect: { left: Math.round(t.left), top: Math.round(t.top), right: Math.round(t.right), bottom: Math.round(t.bottom) },
+          scrollY: Math.round(window.scrollY),
         };
       })()`);
 
@@ -3187,6 +3216,37 @@ async function main() {
       'a build pressed while on the step advances to the results',
       afterRebuild !== null && /7 of 11/.test(afterRebuild.progress),
       JSON.stringify(afterRebuild && { progress: afterRebuild.progress }),
+    );
+
+    const geometryNegative = await evaluate(`(() => {
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      const measure = (node, card) => {
+        const t = node.getBoundingClientRect();
+        const c = card ? card.getBoundingClientRect() : null;
+        const w = c ? Math.min(t.right, c.right) - Math.max(t.left, c.left) : 0;
+        const h = c ? Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top) : 0;
+        return {
+          visible: Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0,
+          overlap: w > 0 && h > 0 ? Math.round(w * h) : 0,
+        };
+      };
+      const card = document.querySelector('#app .cp-tour__card');
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:-400px;top:80px;width:120px;height:80px;';
+      document.body.appendChild(probe);
+      const offScreen = measure(probe, null);
+      const c = card.getBoundingClientRect();
+      probe.style.left = String(Math.round(c.left + 10)) + 'px';
+      probe.style.top = String(Math.round(c.top + 10)) + 'px';
+      const covered = measure(probe, card);
+      probe.remove();
+      return { offVisible: offScreen.visible, coveredOverlap: covered.overlap };
+    })()`);
+    record(
+      'the geometry helper rejects an off-screen target and a real card overlap',
+      geometryNegative.offVisible === false && geometryNegative.coveredOverlap > 0,
+      JSON.stringify(geometryNegative),
     );
 
     await advanceTour(1);
@@ -3240,7 +3300,7 @@ async function main() {
     const mapAnchor = await anchorVisible('.cp-map-mount');
     record(
       'the map step points at the visible map',
-      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true && mapBox !== null && mapBox.covered === false,
+      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true && mapAnchor.overlap === 0,
       JSON.stringify({ progress: atMap && atMap.progress, mapAnchor, mapBox }),
     );
     const markerStability = await evaluate(`(async () => {
@@ -3284,7 +3344,7 @@ async function main() {
     const reservationAnchor = await anchorVisible('#cp-reservation-heading');
     record(
       'the reservation step points at the visible planner',
-      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true && reservationBox !== null && reservationBox.covered === false,
+      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true && reservationAnchor.overlap === 0,
       JSON.stringify({ progress: reservationStep && reservationStep.progress, reservationAnchor, reservationBox }),
     );
 
