@@ -78,6 +78,8 @@ export function RecurringTaskForm({
   /** Editing a series whose location is undefined keeps that legacy choice until changed. */
   const [legacyEditing, setLegacyEditing] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  /** Which field the current error belongs to, so it can be associated with that input. */
+  const [errorField, setErrorField] = useState<'title' | 'location' | null>(null);
   const fieldId = useId();
 
   // The start date follows the viewed day until the user edits it or opens a
@@ -114,6 +116,7 @@ export function RecurringTaskForm({
     const message = validateDraft(draft, locations);
     if (message) {
       setError(message);
+      setErrorField(/title/i.test(message) ? 'title' : /name/i.test(message) ? 'location' : null);
       return;
     }
 
@@ -197,9 +200,15 @@ export function RecurringTaskForm({
             id={`${fieldId}-title`}
             className="cp-input"
             value={draft.title}
+            aria-invalid={errorField === 'title'}
+            aria-describedby={errorField === 'title' ? `${fieldId}-error` : undefined}
             maxLength={MAX_SERIES_TITLE + 20}
             autoComplete="off"
-            onChange={(event) => patch({ title: event.target.value })}
+            onChange={(event) => {
+              patch({ title: event.target.value });
+              setError(null);
+              setErrorField(null);
+            }}
           />
         </label>
 
@@ -353,8 +362,14 @@ export function RecurringTaskForm({
           idPrefix={fieldId}
           locations={locations}
           draft={draft.location}
-          onChange={(next) => patch({ location: next })}
+          onChange={(next) => {
+            patch({ location: next });
+            setError(null);
+            setErrorField(null);
+          }}
           allowLegacy={editingId !== null && legacyEditing}
+          describedBy={errorField === 'location' ? `${fieldId}-error` : undefined}
+          invalid={errorField === 'location'}
         />
         </OptionalDetails>
 

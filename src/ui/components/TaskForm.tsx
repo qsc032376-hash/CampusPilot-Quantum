@@ -45,6 +45,8 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
   const [error, setError] = useState<string | null>(null);
   const [locationDraft, setLocationDraft] = useState<LocationDraft>(() => defaultLocationDraft(request.locations));
   const [detailsOpen, setDetailsOpen] = useState(false);
+  /** Which field the current error belongs to, so it can be associated with that input. */
+  const [errorField, setErrorField] = useState<'title' | 'location' | null>(null);
   const fieldId = useId();
 
   const preview = parseCampusInput(due);
@@ -71,12 +73,14 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
 
     if (!result.ok) {
       setError(result.message);
+      setErrorField(/title/i.test(result.message) ? 'title' : null);
       return;
     }
 
     const located = buildTaskLocation(locationDraft, request.locations);
     if (!located.ok) {
       setError(located.message);
+      setErrorField('location');
       return;
     }
 
@@ -87,6 +91,7 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
     setChoice(null);
     setLocationDraft(defaultLocationDraft(request.locations));
     setDetailsOpen(false);
+    setErrorField(null);
   }
 
   return (
@@ -102,7 +107,13 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
           <input
             className="cp-input"
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            aria-invalid={errorField === 'title'}
+            aria-describedby={errorField === 'title' ? `${fieldId}-error` : undefined}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              setError(null);
+              setErrorField(null);
+            }}
             placeholder="Review lecture notes"
             maxLength={MAX_TITLE_LENGTH + 20}
             autoComplete="off"
@@ -143,8 +154,14 @@ export function TaskForm({ request, defaultDueIso, rangeStartIso, onAdd, onRemov
             idPrefix={fieldId}
             locations={request.locations}
             draft={locationDraft}
-            onChange={setLocationDraft}
+            onChange={(next) => {
+            setLocationDraft(next);
+            setError(null);
+            setErrorField(null);
+          }}
             allowLegacy={false}
+          describedBy={errorField === 'location' ? `${fieldId}-error` : undefined}
+          invalid={errorField === 'location'}
           />
 
           <div className="cp-field-row cp-field-row--split">

@@ -8,6 +8,9 @@ interface TaskLocationFieldProps {
   onChange: (next: LocationDraft) => void;
   /** Editing a legacy value offers "keep the existing default" instead of none. */
   allowLegacy: boolean;
+  /** Optional error association for the custom-name input. */
+  describedBy?: string;
+  invalid?: boolean;
 }
 
 /**
@@ -16,7 +19,15 @@ interface TaskLocationFieldProps {
  * This is display metadata for the personal plan only: it never claims a room is
  * open, available or booked, and it does not feed the recommender.
  */
-export function TaskLocationField({ idPrefix, locations, draft, onChange, allowLegacy }: TaskLocationFieldProps) {
+export function TaskLocationField({
+  idPrefix,
+  locations,
+  draft,
+  onChange,
+  allowLegacy,
+  describedBy,
+  invalid = false,
+}: TaskLocationFieldProps) {
   const selectId = `${idPrefix}-location`;
   const customId = `${idPrefix}-location-custom`;
 
@@ -62,6 +73,8 @@ export function TaskLocationField({ idPrefix, locations, draft, onChange, allowL
             id={customId}
             className="cp-input"
             value={draft.customName}
+            aria-invalid={invalid}
+            aria-describedby={describedBy}
             maxLength={140}
             autoComplete="off"
             placeholder="My desk"

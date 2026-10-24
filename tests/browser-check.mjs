@@ -1948,6 +1948,135 @@ async function main() {
     await send('Emulation.clearDeviceMetricsOverride', {});
     await new Promise((resolve) => setTimeout(resolve, 300));
 
+    // --- D QA: submit errors are associated with their inputs ---
+    const axDescriptionOf = async (selector) => {
+      const object = await send('Runtime.evaluate', {
+        expression: `document.querySelector(${JSON.stringify(selector)})`,
+        returnByValue: false,
+      });
+      if (!object.result || !object.result.result || !object.result.result.objectId) return '';
+      const tree = await send('Accessibility.getPartialAXTree', {
+        objectId: object.result.result.objectId,
+        fetchRelatives: false,
+      });
+      const node = tree.result && tree.result.nodes ? tree.result.nodes[0] : null;
+      return node && node.description ? node.description.value : '';
+    };
+    const errorFacts = (inputSelector) =>
+      evaluate(`(() => {
+        const input = document.querySelector(${JSON.stringify(inputSelector)});
+        if (!input) return null;
+        const describedBy = input.getAttribute('aria-describedby');
+        const target = describedBy ? document.getElementById(describedBy) : null;
+        const box = target ? target.getBoundingClientRect() : null;
+        return {
+          invalid: input.getAttribute('aria-invalid'),
+          describedBy,
+          targetText: target ? target.textContent.trim() : '',
+          targetVisible: !!box && box.height > 0,
+        };
+      })()`);
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const oneOffTitleFacts = await errorFacts('#app form.cp-form input:not([type])');
+    const oneOffTitleAx = await axDescriptionOf('#app form.cp-form input:not([type])');
+    record(
+      'an empty one-off title is tied to its error',
+      oneOffTitleFacts.invalid === 'true' &&
+        oneOffTitleFacts.describedBy &&
+        oneOffTitleFacts.targetText.length > 0 &&
+        oneOffTitleFacts.targetVisible &&
+        oneOffTitleAx.includes(oneOffTitleFacts.targetText),
+      JSON.stringify({ ...oneOffTitleFacts, ax: oneOffTitleAx }),
+    );
+
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const input = form.querySelector('input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'Now has a title');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const clearedTitle = await errorFacts('#app form.cp-form input:not([type])');
+    record(
+      'editing the title clears the error state',
+      clearedTitle.invalid === 'false' && !clearedTitle.describedBy && clearedTitle.targetText === '',
+      JSON.stringify(clearedTitle),
+    );
+
+    // One-off, Other with a blank name.
+    await evaluate(`(() => {
+      const form = document.querySelector('#app form.cp-form');
+      const toggle = form.querySelector('.cp-optional__toggle');
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      const select = [...form.querySelectorAll('select')].find((item) =>
+        [...item.options].some((option) => option.value === 'other'),
+      );
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'other');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Add task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const oneOffCustomFacts = await errorFacts('#app form.cp-form input[id$="-location-custom"]');
+    const oneOffCustomAx = await axDescriptionOf('#app form.cp-form input[id$="-location-custom"]');
+    record(
+      'a blank one-off custom name is tied to its error',
+      oneOffCustomFacts.invalid === 'true' &&
+        oneOffCustomFacts.describedBy &&
+        /name/i.test(oneOffCustomFacts.targetText) &&
+        oneOffCustomFacts.targetVisible &&
+        oneOffCustomAx.includes(oneOffCustomFacts.targetText),
+      JSON.stringify({ ...oneOffCustomFacts, ax: oneOffCustomAx }),
+    );
+
+    // Repeating: empty title.
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await evaluate(`(() => {
+      const section = document.querySelector('#app section[aria-labelledby="cp-recurring-heading"]');
+      const title = section.querySelector('form.cp-form input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(title, '');
+      title.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await clickButton('Add repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const seriesTitleFacts = await errorFacts('#app section[aria-labelledby="cp-recurring-heading"] form.cp-form input:not([type])');
+    const seriesTitleAx = await axDescriptionOf(
+      '#app section[aria-labelledby="cp-recurring-heading"] form.cp-form input:not([type])',
+    );
+    record(
+      'an empty series title is tied to its error',
+      seriesTitleFacts.invalid === 'true' &&
+        seriesTitleFacts.describedBy &&
+        seriesTitleFacts.targetText.length > 0 &&
+        seriesTitleFacts.targetVisible &&
+        seriesTitleAx.includes(seriesTitleFacts.targetText),
+      JSON.stringify({ ...seriesTitleFacts, ax: seriesTitleAx }),
+    );
+
+    // Repeating: Other with a blank name is covered by the pure validator
+    // (tests/task-location-ui.test.ts) and by the same TaskLocationField code
+    // path already asserted for the one-off form above.
+    record(
+      'the two forms never share an error id',
+      await evaluate(`(() => {
+        const ids = [...document.querySelectorAll('#app .cp-error[id]')].map((el) => el.id);
+        return new Set(ids).size === ids.length;
+      })()`),
+      '',
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {
