@@ -104,3 +104,16 @@ const output = generateMultiDaySchedule({
   No UI changes, policy changes, or external availability data are included.
 
 Additional verification: `node --test tests/recurring-tasks.test.ts`.
+
+## Intensity selection
+
+`MultiDayScheduleRequest.intensity?: ScheduleIntensity` accepts `relaxed` or `intense`.
+Import the feature-local type from `../schedule-intensity/index.ts`.
+Omitted/intense calls preserve the old result. Relaxed delays baseline study blocks
+within each existing day to target 15 elapsed minutes between blocks without
+losing any task that the baseline could place. Natural gaps count; insufficient
+slack shortens later gaps first. Priority ordering is unchanged. See
+`../schedule-intensity/README.md` for the single-day adapter and exact semantics.
+This option is personal planning, not room booking or availability.
+
+Additional regression command: `node --test tests/schedule-intensity.test.ts`.

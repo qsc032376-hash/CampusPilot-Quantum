@@ -8,6 +8,8 @@ import { TaskForm } from './components/TaskForm.tsx';
 import type { TaskDraft } from './components/TaskForm.tsx';
 import { RecurringTaskForm } from './components/RecurringTaskForm.tsx';
 import { TaskModeSwitch } from './components/TaskModeSwitch.tsx';
+import { ScheduleIntensitySwitch } from './components/ScheduleIntensitySwitch.tsx';
+import type { ScheduleIntensity } from '../features/schedule-intensity/index.ts';
 import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
@@ -70,6 +72,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [dayCountInput, setDayCountInput] = useState(() => String(initialRange.dayCount));
   /** Which task form is visible; switching never touches tasks, series or the plan. */
   const [taskMode, setTaskMode] = useState<TaskMode>('oneoff');
+  /** Planning pace; every entry that plans must pass this value through. */
+  const [intensity, setIntensity] = useState<ScheduleIntensity>('relaxed');
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -90,6 +94,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     nextRequest: ScheduleRequest,
     nextRange: ScheduleRange,
     nextSeries: TaskSeries[],
+    nextIntensity: ScheduleIntensity,
   ): MultiDayScheduleResponse | null {
     try {
       const windows = buildDailyWindows(nextRange);
@@ -100,6 +105,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
         classes: nextRequest.classes,
         unavailablePeriods: nextRequest.unavailablePeriods,
         locations: nextRequest.locations,
+        intensity: nextIntensity,
       });
       setMulti(output);
       setMessage(null);
@@ -132,6 +138,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     nextRange: ScheduleRange,
     nextRequest: ScheduleRequest,
     nextSeries: TaskSeries[],
+    nextIntensity: ScheduleIntensity,
   ): MultiDayScheduleResponse | null {
     const dayFailure = dayCountError(rawDays);
     if (dayFailure) {
@@ -147,11 +154,11 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       setMessage(rangeFailure);
       return null;
     }
-    return runSchedule(nextRequest, resolved, nextSeries);
+    return runSchedule(nextRequest, resolved, nextSeries, nextIntensity);
   }
 
   function handleBuild() {
-    const output = planWith(dayCountInput, range, request, series);
+    const output = planWith(dayCountInput, range, request, series, intensity);
     if (!output) return;
     syncSelection(output, selectedId);
     if (output.days.length > 0 && !output.days.some((day) => day.date === selectedDate)) {
@@ -163,7 +170,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   function applyRequest(next: ScheduleRequest) {
     setRequest(next);
     if (!hasBuilt) return;
-    const output = planWith(dayCountInput, range, next, series);
+    const output = planWith(dayCountInput, range, next, series, intensity);
     if (output) syncSelection(output, selectedId);
   }
 
@@ -171,7 +178,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   function applySeries(next: TaskSeries[]) {
     setSeries(next);
     if (!hasBuilt) return;
-    const output = planWith(dayCountInput, range, request, next);
+    const output = planWith(dayCountInput, range, request, next, intensity);
     if (output) syncSelection(output, selectedId);
   }
 
@@ -220,7 +227,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       return;
     }
     setMessage(null);
-    if (hasBuilt) runSchedule(request, resolved, series);
+    if (hasBuilt) runSchedule(request, resolved, series, intensity);
   }
 
   /** Rejects out-of-range or non-numeric day counts instead of clamping them. */
@@ -235,6 +242,18 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
       return;
     }
     handleRangeChange({ dayCount: Number(value) });
+  }
+
+  /**
+   * Switching the pace re-plans an existing plan with the same validation gate
+   * as every other settings change. It touches no task, series or deadline.
+   */
+  function handleIntensityChange(next: ScheduleIntensity) {
+    if (next === intensity) return;
+    setIntensity(next);
+    if (!hasBuilt) return;
+    const output = planWith(dayCountInput, range, request, series, next);
+    if (output) syncSelection(output, selectedId);
   }
 
   /** Switching the viewed day never re-runs the planner. */
@@ -265,8 +284,9 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     setDayCountInput(String(freshRange.dayCount));
     setSelectedDate(freshRange.startDate);
     setHasBuilt(false);
-    // Reset also returns to the default one-time task mode.
+    // Reset also returns to the default one-time task mode and pace.
     setTaskMode('oneoff');
+    setIntensity('relaxed');
     setSeriesFormKey((current) => current + 1);
   }
 
@@ -431,6 +451,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
                 Next day
               </button>
             </div>
+
+            <ScheduleIntensitySwitch intensity={intensity} onChange={handleIntensityChange} />
 
             <p className="cp-panel__foot">
               Switching the viewed day does not re-run the planner. Changing the range, the task list or a repeating

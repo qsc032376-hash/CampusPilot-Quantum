@@ -1295,6 +1295,273 @@ async function main() {
       JSON.stringify(secondReset),
     );
 
+    // --- schedule intensity: relaxed vs high intensity ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    const intensityPanel = '#app section[aria-labelledby="cp-range-heading"]';
+    const intensityState = () =>
+      evaluate(`(() => {
+        const buttons = [...document.querySelectorAll('${intensityPanel} .cp-intensity button')];
+        return {
+          labels: buttons.map((button) => button.textContent.trim()),
+          pressed: buttons.map((button) => button.getAttribute('aria-pressed')),
+          text: (document.querySelector('${intensityPanel} .cp-intensity') || {}).innerText || '',
+        };
+      })()`);
+
+    const defaultIntensity = await intensityState();
+    record(
+      'relaxed is the default pace',
+      defaultIntensity.labels[0] === 'Relaxed' &&
+        defaultIntensity.labels[1] === 'High intensity' &&
+        defaultIntensity.pressed[0] === 'true' &&
+        defaultIntensity.pressed[1] === 'false',
+      JSON.stringify(defaultIntensity),
+    );
+    record(
+      'both paces explain what they do',
+      /15-minute breaks/.test(defaultIntensity.text) && /without planned breaks/.test(defaultIntensity.text),
+      defaultIntensity.text,
+    );
+
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const addTightTask = async (title) => {
+      await evaluate([
+        '(() => {',
+        "  const form = document.querySelector('#app form.cp-form');",
+        "  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;",
+        "  const titleInput = form.querySelector('input:not([type])');",
+        '  setter.call(titleInput, ' + JSON.stringify(title) + ');',
+        "  titleInput.dispatchEvent(new Event('input', { bubbles: true }));",
+        "  const minutes = form.querySelector('input[type=\"number\"]');",
+        "  setter.call(minutes, '60');",
+        "  minutes.dispatchEvent(new Event('input', { bubbles: true }));",
+        "  const due = form.querySelector('input[type=\"datetime-local\"]');",
+        "  setter.call(due, '2026-10-20T17:00');",
+        "  due.dispatchEvent(new Event('input', { bubbles: true }));",
+        '  return "ok";',
+        '})()',
+      ].join('\n'));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await clickButton('Add task');
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    };
+    await addTightTask('Pace A');
+    await addTightTask('Pace B');
+    await addTightTask('Pace C');
+
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const relaxedPlan = await evaluate(`(() => ({
+      sessions: [...document.querySelectorAll('#app .cp-session')].map((el) => el.textContent),
+      tasks: document.querySelectorAll('#app .cp-tasks__row').length,
+      series: document.querySelectorAll('#app .cp-series__row').length,
+    }))()`);
+
+    await clickButton('High intensity');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const intensePlan = await evaluate(`(() => ({
+      pressed: [...document.querySelectorAll('${intensityPanel} .cp-intensity button')].map((b) => b.getAttribute('aria-pressed')),
+      sessions: [...document.querySelectorAll('#app .cp-session')].map((el) => el.textContent),
+      tasks: document.querySelectorAll('#app .cp-tasks__row').length,
+      series: document.querySelectorAll('#app .cp-series__row').length,
+    }))()`);
+    record(
+      'switching to high intensity re-plans with the new pace',
+      intensePlan.pressed[1] === 'true' && intensePlan.sessions.join('|') !== relaxedPlan.sessions.join('|'),
+      JSON.stringify({ relaxed: relaxedPlan.sessions, intense: intensePlan.sessions }),
+    );
+    record(
+      'the pace keeps the same placed tasks and plan size',
+      intensePlan.sessions.length === relaxedPlan.sessions.length && intensePlan.tasks === relaxedPlan.tasks,
+      String(intensePlan.sessions.length) + ' vs ' + String(relaxedPlan.sessions.length),
+    );
+    record(
+      'switching the pace changes no task or series data',
+      intensePlan.tasks === relaxedPlan.tasks && intensePlan.series === relaxedPlan.series,
+      JSON.stringify({ tasks: intensePlan.tasks, series: intensePlan.series }),
+    );
+
+    await clickButton('Relaxed');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const backToRelaxed = await evaluate(`(() => ({
+      pressed: [...document.querySelectorAll('${intensityPanel} .cp-intensity button')].map((b) => b.getAttribute('aria-pressed')),
+      sessions: [...document.querySelectorAll('#app .cp-session')].map((el) => el.textContent),
+    }))()`);
+    record(
+      'switching back restores the relaxed plan',
+      backToRelaxed.pressed[0] === 'true' && backToRelaxed.sessions.join('|') === relaxedPlan.sessions.join('|'),
+      JSON.stringify(backToRelaxed.sessions),
+    );
+
+    // Day browsing and the task-mode switch must not change the pace.
+    await evaluate("[...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Next day')).click()");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await clickButton('Repeating task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const afterBrowsing = await intensityState();
+    record(
+      'day browsing and the task-mode switch keep the pace',
+      afterBrowsing.pressed[0] === 'true' && afterBrowsing.pressed[1] === 'false',
+      JSON.stringify(afterBrowsing.pressed),
+    );
+    await clickButton('One-time task');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    // An invalid day count still blocks planning when the pace is switched.
+    await setDays('0');
+    await clickButton('High intensity');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const gatedIntensity = await evaluate(`(() => ({
+      days: document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="number"]').value,
+      error: ((document.querySelector('#app section[aria-labelledby="cp-results-heading"] .cp-error') || {}).textContent) || '',
+      sessions: document.querySelectorAll('#app .cp-session').length,
+      pressed: [...document.querySelectorAll('${intensityPanel} .cp-intensity button')].map((b) => b.getAttribute('aria-pressed')),
+    }))()`);
+    record(
+      'switching the pace cannot bypass the day-count gate',
+      gatedIntensity.days === '0' &&
+        /1 to 30/.test(gatedIntensity.error) &&
+        gatedIntensity.sessions === 0 &&
+        gatedIntensity.pressed[1] === 'true',
+      JSON.stringify(gatedIntensity),
+    );
+
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const afterIntensityReset = await intensityState();
+    record(
+      'reset returns to the relaxed default',
+      afterIntensityReset.pressed[0] === 'true' && afterIntensityReset.pressed[1] === 'false',
+      JSON.stringify(afterIntensityReset.pressed),
+    );
+
+    // --- intensity buttons: real Enter / Space activation ---
+    await clickButton('Reset');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '2026-10-20');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await addTightTask('Key A');
+    await addTightTask('Key B');
+    await addTightTask('Key C');
+    await clickButton('Build plan');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const focusPaceButton = (index) =>
+      evaluate(`(() => {
+        const buttons = [...document.querySelectorAll('#app .cp-intensity button')];
+        buttons[${index}].focus();
+        return document.activeElement === buttons[${index}];
+      })()`);
+    const paceKeyDown = (key, code, virtualKeyCode, text) =>
+      send('Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key,
+        code,
+        windowsVirtualKeyCode: virtualKeyCode,
+        nativeVirtualKeyCode: virtualKeyCode,
+        // A native button only runs its default activation when the event
+        // carries text; without it the keydown reaches JS but does not click.
+        text,
+        unmodifiedText: text,
+      });
+    const paceKeyUp = (key, code, virtualKeyCode) =>
+      send('Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key,
+        code,
+        windowsVirtualKeyCode: virtualKeyCode,
+        nativeVirtualKeyCode: virtualKeyCode,
+      });
+    const paceState = () =>
+      evaluate(`(() => ({
+        pressed: [...document.querySelectorAll('#app .cp-intensity button')].map((b) => b.getAttribute('aria-pressed')),
+        sessions: [...document.querySelectorAll('#app .cp-session')].map((el) => el.textContent),
+        tasks: document.querySelectorAll('#app .cp-tasks__row').length,
+        series: document.querySelectorAll('#app .cp-series__row').length,
+      }))()`);
+
+    const keyboardBaseline = await paceState();
+    record(
+      'the keyboard case starts from a relaxed plan',
+      keyboardBaseline.pressed[0] === 'true' && keyboardBaseline.sessions.length >= 3,
+      JSON.stringify(keyboardBaseline.pressed) + ' sessions=' + String(keyboardBaseline.sessions.length),
+    );
+
+    record('the high-intensity button can take focus', (await focusPaceButton(1)) === true, '');
+    await paceKeyDown('Enter', 'Enter', 13, '\r');
+    await paceKeyUp('Enter', 'Enter', 13);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const afterEnter = await paceState();
+    record(
+      'Enter switches the pace to high intensity',
+      afterEnter.pressed[1] === 'true' && afterEnter.pressed[0] === 'false',
+      JSON.stringify(afterEnter.pressed),
+    );
+    record(
+      'Enter re-plans with the new pace and keeps the tasks',
+      afterEnter.sessions.join('|') !== keyboardBaseline.sessions.join('|') &&
+        afterEnter.sessions.length === keyboardBaseline.sessions.length &&
+        afterEnter.tasks === keyboardBaseline.tasks,
+      JSON.stringify({ before: keyboardBaseline.sessions, after: afterEnter.sessions }),
+    );
+
+    record('the relaxed button can take focus', (await focusPaceButton(0)) === true, '');
+    const scrollBeforeSpace = await evaluate('window.scrollY');
+    await paceKeyDown(' ', 'Space', 32, ' ');
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const afterSpaceDown = await paceState();
+    const scrollDuringSpace = await evaluate('window.scrollY');
+    record(
+      'Space keydown alone does not switch the pace',
+      afterSpaceDown.pressed[1] === 'true' && afterSpaceDown.pressed[0] === 'false',
+      JSON.stringify(afterSpaceDown.pressed),
+    );
+    await paceKeyUp(' ', 'Space', 32);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const afterSpace = await paceState();
+    const scrollAfterSpace = await evaluate('window.scrollY');
+    record(
+      'Space keyup switches the pace back to relaxed',
+      afterSpace.pressed[0] === 'true' && afterSpace.pressed[1] === 'false',
+      JSON.stringify(afterSpace.pressed),
+    );
+    record(
+      'Space restores the relaxed plan without touching the tasks',
+      afterSpace.sessions.join('|') === keyboardBaseline.sessions.join('|') &&
+        afterSpace.tasks === keyboardBaseline.tasks &&
+        afterSpace.series === keyboardBaseline.series,
+      JSON.stringify({ before: keyboardBaseline.sessions, after: afterSpace.sessions }),
+    );
+    record(
+      'Space does not scroll the page',
+      scrollDuringSpace === scrollBeforeSpace && scrollAfterSpace === scrollBeforeSpace,
+      'before=' + String(scrollBeforeSpace) + ' during=' + String(scrollDuringSpace) + ' after=' + String(scrollAfterSpace),
+    );
+
+    // A single press must produce exactly one change: no extra activation from
+    // the keyup after the keydown already toggled, and no double click.
+    record(
+      'one press produces one pace change',
+      afterSpace.pressed[0] === 'true' && afterSpace.pressed[1] === 'false',
+      JSON.stringify(afterSpace.pressed),
+    );
+
     // --- campus map ---
     await evaluate("document.querySelector('#app .cp-map').scrollIntoView({block:'start'})");
     for (let attempt = 0; attempt < 40; attempt += 1) {

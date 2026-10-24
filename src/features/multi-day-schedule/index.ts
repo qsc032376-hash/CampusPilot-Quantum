@@ -1,4 +1,5 @@
-import { generateMockSchedule } from '../../scheduler.ts';
+import { generateSchedule } from '../schedule-intensity/index.ts';
+import type { ScheduleIntensity } from '../schedule-intensity/index.ts';
 import type { ScheduleRequest, ScheduleResponse, StudyTask } from '../../types.ts';
 import { generateOccurrences } from '../recurring-tasks/index.ts';
 import type { TaskSeries } from '../recurring-tasks/index.ts';
@@ -9,6 +10,7 @@ export type { DailyWindow, DailyWindowOptions } from './windows.ts';
 export interface MultiDayScheduleRequest extends Omit<ScheduleRequest, 'windowStart' | 'windowEnd'> {
   windows: DailyWindow[];
   taskSeries?: TaskSeries[];
+  intensity?: ScheduleIntensity;
 }
 export interface DailySchedule extends DailyWindow {
   date: string;
@@ -25,7 +27,7 @@ export interface MultiDayScheduleResponse {
 
 /** Personal study planning only. Default location and greedy placement remain owned by the existing scheduler. */
 export function generateMultiDaySchedule(request: MultiDayScheduleRequest): MultiDayScheduleResponse {
-  const { windows, taskSeries = [], ...oneOffInput } = request;
+  const { windows, taskSeries = [], intensity, ...oneOffInput } = request;
   const dates = validateDailyWindows(windows);
   const occurrences = generateOccurrences(taskSeries, windows);
   const tasks = [...oneOffInput.tasks.map(task => ({ ...task })), ...occurrences];
@@ -35,9 +37,9 @@ export function generateMultiDaySchedule(request: MultiDayScheduleRequest): Mult
     ids.add(task.id);
   }
   const input = { ...oneOffInput, tasks };
-  // Exact existing response (including omitted conflicts and failure wording) for one day.
+  // Omitted/intense preserves the exact existing one-day response and failure wording.
   if (windows.length === 1) {
-    const result = generateMockSchedule({ ...input, ...windows[0] });
+    const result = generateSchedule({ ...input, ...windows[0] }, { intensity });
     return { tasks, days: [{ ...windows[0], date: dates[0], result: dayResult(result) }], result };
   }
   let remaining = input.tasks;
@@ -45,7 +47,7 @@ export function generateMultiDaySchedule(request: MultiDayScheduleRequest): Mult
   const result: ScheduleResponse = { blocks: [], unscheduledTasks: [] };
   const conflicts = new Map<string, NonNullable<ScheduleResponse['conflicts']>[number]>();
   for (let i = 0; i < windows.length; i += 1) {
-    const response = generateMockSchedule({ ...input, ...windows[i], tasks: remaining });
+    const response = generateSchedule({ ...input, ...windows[i], tasks: remaining }, { intensity });
     days.push({ ...windows[i], date: dates[i], result: dayResult(response) });
     result.blocks.push(...response.blocks);
     const placed = new Set(response.blocks.map(block => block.taskId));
