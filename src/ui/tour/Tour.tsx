@@ -217,7 +217,9 @@ export function Tour({ hasPlan, planRuns, hasSelection, replayKey }: TourProps) 
           finish('done');
           return -1;
         }
-        if (delta > 0 && TOUR_STEPS[current]?.id === 'build' && !hasPlan) return current;
+        // The build step only advances through a real on-step build, never by
+        // Next, ArrowRight or any other forward control.
+        if (delta > 0 && TOUR_STEPS[current]?.waitsForPlan) return current;
         return next;
       });
     },

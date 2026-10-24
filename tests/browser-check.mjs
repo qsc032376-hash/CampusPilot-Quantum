@@ -2939,8 +2939,20 @@ async function main() {
         JSON.stringify({ width, ...viewport }),
       );
 
-      await evaluate("document.querySelectorAll('#app .cp-session')[0].click()");
+      const selected = await evaluate(`(() => {
+        const list = [...document.querySelectorAll('#app .cp-session')];
+        const active = list.find((item) => item.classList.contains('is-selected'));
+        if (active) return { clicked: false, count: list.length };
+        if (list[0]) list[0].click();
+        return { clicked: true, count: list.length };
+      })()`);
       await new Promise((resolve) => setTimeout(resolve, 900));
+      const stillSelected = await evaluate("document.querySelectorAll('#app .cp-session.is-selected').length");
+      record(
+        `a real block stays selected at ${width}px`,
+        selected.count > 0 && stillSelected === 1,
+        JSON.stringify({ width, ...selected, stillSelected }),
+      );
       const geoms = await evaluate(`(() => {
         const where = document.querySelector('#app [data-tour="where"]');
         const card = document.querySelector('#app .cp-tour__card');
@@ -3123,6 +3135,14 @@ async function main() {
       JSON.stringify(afterBack && { progress: afterBack.progress }),
     );
 
+    await tourKey('ArrowRight', 'ArrowRight', 39);
+    const afterBackArrow = await tourState();
+    record(
+      'the right arrow cannot skip the build step after going back',
+      afterBackArrow !== null && /6 of 11/.test(afterBackArrow.progress),
+      JSON.stringify(afterBackArrow && { progress: afterBackArrow.progress }),
+    );
+
     await evaluate(`(() => {
       const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
       if (button) { button.focus(); button.click(); }
@@ -3136,6 +3156,14 @@ async function main() {
       'replaying with an existing plan does not skip the build step',
       replayAtBuild !== null && /6 of 11/.test(replayAtBuild.progress),
       JSON.stringify(replayAtBuild && { progress: replayAtBuild.progress }),
+    );
+
+    await tourKey('ArrowRight', 'ArrowRight', 39);
+    const replayArrow = await tourState();
+    record(
+      'the right arrow cannot skip the build step after a replay',
+      replayArrow !== null && /6 of 11/.test(replayArrow.progress),
+      JSON.stringify(replayArrow && { progress: replayArrow.progress }),
     );
 
     await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
