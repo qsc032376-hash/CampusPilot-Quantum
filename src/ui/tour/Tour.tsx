@@ -165,6 +165,17 @@ export function Tour({ hasPlan, hasSelection, replayKey }: TourProps) {
     };
   }, [step, reduced]);
 
+  // Selecting a block changes the Where layout; keep its anchor on screen.
+  useEffect(() => {
+    if (!step || step.id !== 'block' || !hasSelection) return;
+    const element = document.querySelector('[data-tour="where"]');
+    if (!element) return;
+    const box = element.getBoundingClientRect();
+    if (box.top < 0 || box.bottom > window.innerHeight) {
+      element.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+    }
+  }, [hasSelection, step, reduced]);
+
   // Interactive steps hand focus to the real control; the rest focus the card.
   useEffect(() => {
     if (!step) return;

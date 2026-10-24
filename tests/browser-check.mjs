@@ -2906,6 +2906,68 @@ async function main() {
       }
     };
 
+    // --- mobile Where loop, isolated from every other step ---
+    await reloadTour(null);
+    await evaluate(`(() => {
+      const date = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(date, '2026-10-19');
+      date.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await advanceTour(5);
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await advanceTour(1);
+    const whereLoopStart = await tourState();
+    record(
+      'the isolated mobile loop reaches the where step',
+      whereLoopStart !== null && /8 of 11/.test(whereLoopStart.progress),
+      JSON.stringify(whereLoopStart && { progress: whereLoopStart.progress }),
+    );
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 812, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const viewport = await evaluate('({ innerWidth: window.innerWidth, clientWidth: document.documentElement.clientWidth })');
+      record(
+        `the mobile loop really uses a ${width}px viewport`,
+        viewport.innerWidth === width && viewport.clientWidth === width,
+        JSON.stringify({ width, ...viewport }),
+      );
+
+      await evaluate("document.querySelectorAll('#app .cp-session')[0].click()");
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const geoms = await evaluate(`(() => {
+        const where = document.querySelector('#app [data-tour="where"]');
+        const card = document.querySelector('#app .cp-tour__card');
+        if (!where || !card) return null;
+        const w = where.getBoundingClientRect();
+        const c = card.getBoundingClientRect();
+        return {
+          scrollY: Math.round(window.scrollY),
+          where: { top: Math.round(w.top), bottom: Math.round(w.bottom), height: Math.round(w.height) },
+          card: { top: Math.round(c.top), bottom: Math.round(c.bottom) },
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+      record(
+        `the selected where card is on screen and clear of the tour card at ${width}px`,
+        geoms !== null &&
+          geoms.where.top >= 0 &&
+          geoms.where.top < 812 - 40 &&
+          geoms.card.top >= geoms.where.top + 80 &&
+          geoms.overflow === 0,
+        JSON.stringify(geoms),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Back to a clean start for the remaining tour tests.
     await reloadTour(null);
     const welcome = await tourState();
     record(
