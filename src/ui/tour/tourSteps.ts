@@ -150,15 +150,15 @@ export const TOUR_STEPS: TourStep[] = [
   {
     id: 'assistant',
     chapter: 'explore',
-    name: 'AI assistant',
-    title: 'Describe it, check it, confirm it',
+    name: 'Assistant preview',
+    title: 'A preview of the chat window',
     body: [
-      'The AI assistant turns a plain description into task drafts: describe the work and its deadline, answer a question if it asks, then check the list it proposes.',
-      'Nothing is added until you press the confirm button, and the assistant never builds the plan or changes existing blocks. The tour only shows this card — no request is sent.',
+      'This is a visual preview of the scheduling assistant chat. The AI is not connected yet, so messages are not sent and no schedule changes are made.',
+      'Open the assistant panel after the tour to see its layout. This spotlight only introduces the interface and sends no requests.',
     ],
     anchor: '[data-tour="assistant"]',
     effect: 'iris',
-    hint: 'Describe → review the draft → confirm, then build the plan yourself.',
+    hint: 'Chat window preview only · no AI connection or schedule changes.',
   },
   {
     id: 'done',

@@ -195,11 +195,6 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
     applyRequest({ ...request, tasks: [...request.tasks, { id: makeTaskId(), ...draft }] });
   }
 
-  /** Assistant drafts only reach state after the panel's confirm step. */
-  function handleAddDrafts(drafts: TaskDraft[]) {
-    applyRequest({ ...request, tasks: [...request.tasks, ...drafts.map((draft) => ({ id: makeTaskId(), ...draft }))] });
-  }
-
   function handleRemoveTask(id: string) {
     applyRequest({ ...request, tasks: request.tasks.filter((task) => task.id !== id) });
     setSelectedId((current) => (current === `study-${id}` ? null : current));
@@ -530,12 +525,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
         </div>
       </main>
 
-      <AssistantPanel
-        onApply={handleAddDrafts}
-        today={range.startDate}
-        windowStart={windowStart}
-        locationNames={request.locations.map((location) => location.name)}
-      />
+      <AssistantPanel />
 
       <Tour
         hasPlan={multi !== null}

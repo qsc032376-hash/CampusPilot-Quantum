@@ -3538,34 +3538,21 @@ async function main() {
     await send('Emulation.setEmulatedMedia', { features: [] });
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // --- AI assistant panel (stubbed endpoint, no network) ---
+    // --- Assistant UI preview (no network or schedule changes) ---
     await send('Page.reload', {});
     await new Promise((resolve) => setTimeout(resolve, 1200));
     await evaluate(`(() => {
       localStorage.setItem('campuspilot.tour.v1', 'done');
       const original = window.fetch;
-      window.__aiMode = 'unconfigured';
-      window.__aiCalls = 0;
+      window.__assistantRequests = 0;
       window.fetch = async (input, init) => {
         if (String(input).includes('/api/assistant')) {
-          window.__aiCalls = (window.__aiCalls || 0) + 1;
-          if (window.__aiMode === 'unconfigured') {
-            return new Response(JSON.stringify({ error: 'unconfigured' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
-          }
-          if (window.__aiMode === 'question') {
-            return new Response(JSON.stringify({ kind: 'question', question: 'When is it due?' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-          }
-          return new Response(JSON.stringify({
-            kind: 'draft',
-            tasks: [{ title: 'Calculus review', durationMinutes: 120, dueAt: '2026-10-31T23:00:00-04:00' }],
-            notes: ['Deadline was inferred from your message.'],
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          window.__assistantRequests += 1;
         }
         return original(input, init);
       };
       return 'ok';
     })()`);
-    await new Promise((resolve) => setTimeout(resolve, 400));
 
     const aiOpen = await evaluate(`(() => {
       const button = document.querySelector('[data-tour="assistant"]');
@@ -3576,64 +3563,33 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 350));
     const aiPanel = await evaluate(`(() => {
       const panel = document.querySelector('[data-tour="assistant-panel"]');
-      return { open: !!panel, disclosure: panel ? /sent to the configured AI service/.test(panel.innerText) : false };
+      const input = panel?.querySelector('#cp-ai-input');
+      const send = panel?.querySelector('.cp-ai__send');
+      return {
+        open: !!panel,
+        previewNotice: panel ? /UI preview only/.test(panel.innerText) && /messages are not sent/.test(panel.innerText) : false,
+        composerDisabled: input?.disabled === true && send?.disabled === true,
+        placeholderMessage: panel ? /chat will appear here/.test(panel.innerText) : false,
+      };
     })()`);
-    record('the assistant panel opens with a data disclosure', aiOpen === 'ok' && aiPanel.open && aiPanel.disclosure, JSON.stringify(aiPanel));
-
-    const aiType = async (value) => evaluate(`(() => {
-      const input = document.querySelector('#cp-ai-input');
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-      setter.call(input, ${JSON.stringify(value)});
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      document.querySelector('.cp-ai__send').click();
-      return 'ok';
-    })()`);
-
     const aiBaseline = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
-    await evaluate("window.__aiMode = 'question'");
-    await aiType('write my essay');
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const aiQuestion = await evaluate("document.querySelector('.cp-ai__question') ? document.querySelector('.cp-ai__question').textContent : ''");
-    const tasksBefore = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
-    const aiCalls = await evaluate("window.__aiCalls || 0");
     record(
-      'the assistant asks a follow-up question first',
-      /When is it due/.test(aiQuestion) && tasksBefore === aiBaseline && aiCalls >= 1,
-      JSON.stringify({ aiQuestion, aiBaseline, tasksBefore, aiCalls }),
+      'the assistant opens as a clearly disabled UI preview',
+      aiOpen === 'ok' && aiPanel.open && aiPanel.previewNotice && aiPanel.composerDisabled && aiPanel.placeholderMessage,
+      JSON.stringify(aiPanel),
     );
-
-    await evaluate("window.__aiMode = 'draft'");
-    await aiType('calculus review, two hours, due Friday night');
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const draftState = await evaluate(`(() => {
-      const draft = document.querySelector('[data-tour="assistant-draft"]');
-      const tasks = document.querySelectorAll('#app .cp-tasks__row').length;
-      const confirm = document.querySelector('.cp-ai__confirm');
-      return { hasDraft: !!draft, text: draft ? draft.innerText.slice(0, 120) : '', tasks, confirm: !!confirm };
-    })()`);
-    record(
-      'a valid draft is previewed and nothing is added before confirming',
-      draftState.hasDraft && /Calculus review/.test(draftState.text) && draftState.tasks === aiBaseline,
-      JSON.stringify(draftState),
-    );
-
-    await evaluate("document.querySelector('.cp-ai__confirm').click()");
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    const afterConfirm = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
-    record('confirming adds the drafted task to the existing list', afterConfirm === aiBaseline + 1, JSON.stringify({ afterConfirm }));
 
     await evaluate("document.querySelector('.cp-ai__close').click()");
     await new Promise((resolve) => setTimeout(resolve, 300));
     const aiClosed = await evaluate("!document.querySelector('[data-tour=\"assistant-panel\"]')");
     record('the assistant panel closes', aiClosed === true, String(aiClosed));
-
-    await evaluate("window.__aiMode = 'unconfigured'");
-    await evaluate("document.querySelector('[data-tour=\"assistant\"]').click()");
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    await aiType('one hour of reading');
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    const unconfigured = await evaluate("(() => { const node = document.querySelector('.cp-ai__state--warn'); return node ? node.textContent : ''; })()");
-    record('an unconfigured deployment says so instead of answering', /尚未配置|not configured/.test(unconfigured), JSON.stringify({ unconfigured }));
+    const assistantFetchCalls = await evaluate('window.__assistantRequests');
+    const aiTasksAfter = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
+    record(
+      'opening the assistant preview makes no request and changes no tasks',
+      assistantFetchCalls === 0 && aiTasksAfter === aiBaseline,
+      JSON.stringify({ assistantFetchCalls, aiBaseline, aiTasksAfter }),
+    );
 
   } finally {
     if (socket) socket.close();
