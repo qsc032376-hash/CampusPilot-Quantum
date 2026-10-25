@@ -10,6 +10,7 @@ import { RecurringTaskForm } from './components/RecurringTaskForm.tsx';
 import { TaskModeSwitch } from './components/TaskModeSwitch.tsx';
 import { OptionalDetails } from './components/OptionalDetails.tsx';
 import { ScheduleIntensitySwitch } from './components/ScheduleIntensitySwitch.tsx';
+import { Tour } from './tour/Tour.tsx';
 import type { ScheduleIntensity } from '../features/schedule-intensity/index.ts';
 import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
@@ -78,6 +79,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [howOpen, setHowOpen] = useState(false);
   /** Successful planner runs; exposed for the regression that browsing never replans. */
   const [planRuns, setPlanRuns] = useState(0);
+  /** Bumped by the header button so the tour can restart on demand. */
+  const [tourReplay, setTourReplay] = useState(0);
 
   // Windows are previewed before a plan exists so the timeline can show the
   // chosen day even when nothing has been scheduled yet.
@@ -324,7 +327,13 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
   return (
     <div className="cp-app" data-plan-runs={planRuns}>
-      <AppHeader request={request} result={multi?.result ?? null} rangeLabel={rangeLabel} onReset={handleReset} />
+      <AppHeader
+        request={request}
+        result={multi?.result ?? null}
+        rangeLabel={rangeLabel}
+        onReset={handleReset}
+        onReplayTour={() => setTourReplay((value) => value + 1)}
+      />
 
       <main className="cp-main">
         <div className="cp-column">
@@ -370,8 +379,10 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
               />
             </div>
           </section>
-          <LocationCard block={selectedBlock} request={request} />
-          <RecommendedLocations block={selectedBlock} request={request} />
+          <div className="cp-where" data-tour="where">
+            <LocationCard block={selectedBlock} request={request} />
+            <RecommendedLocations block={selectedBlock} request={request} />
+          </div>
         </div>
 
         <div className="cp-column">
@@ -512,6 +523,13 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
           />
         </div>
       </main>
+
+      <Tour
+        hasPlan={multi !== null}
+        planRuns={planRuns}
+        hasSelection={selectedBlock !== null}
+        replayKey={tourReplay}
+      />
 
       <div className="cp-reservation">
         <ReservationPlanner />

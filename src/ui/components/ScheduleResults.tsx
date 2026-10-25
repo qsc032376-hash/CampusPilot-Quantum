@@ -94,7 +94,7 @@ export function ScheduleResults({
         <p className="cp-panel__meta">By day · earliest deadline first</p>
       </div>
 
-      <button type="button" className="cp-button cp-button--full" onClick={onBuild}>
+      <button type="button" className="cp-button cp-button--full" data-tour="build" onClick={onBuild}>
         {multi ? 'Rebuild plan' : 'Build plan'} <span aria-hidden="true">→</span>
       </button>
 

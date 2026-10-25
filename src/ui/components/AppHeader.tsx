@@ -7,10 +7,11 @@ interface AppHeaderProps {
   /** Human-readable label for the selected multi-day range. */
   rangeLabel: string;
   onReset: () => void;
+  onReplayTour?: () => void;
 }
 
 /** Identity, at-a-glance counts, and the only global action. Purely presentational. */
-export function AppHeader({ request, result, rangeLabel, onReset }: AppHeaderProps) {
+export function AppHeader({ request, result, rangeLabel, onReset, onReplayTour }: AppHeaderProps) {
   const placedMinutes = (result?.blocks ?? []).reduce(
     (total, block) => total + (Date.parse(block.end) - Date.parse(block.start)) / 60_000,
     0,
@@ -28,6 +29,11 @@ export function AppHeader({ request, result, rangeLabel, onReset }: AppHeaderPro
         <p className="cp-caveat">
           A plan does not mean a place is open, a room is available or a booking exists.
         </p>
+        {onReplayTour ? (
+          <button type="button" className="cp-linkbutton" onClick={onReplayTour}>
+            Replay tour
+          </button>
+        ) : null}
       </div>
 
       <dl className="cp-stats">

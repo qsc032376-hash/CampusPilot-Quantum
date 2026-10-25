@@ -51,7 +51,7 @@ export function RecommendedLocations({ block, request }: RecommendedLocationsPro
       {plan.status === 'ok' && (
         <>
           <p className="cp-panel__meta">
-            {count} {count === 1 ? 'place is' : 'places are'} listed as open for this block.
+            {count} {count === 1 ? 'place is' : 'places are'} recommended for this simulated block time.
           </p>
 
           {plan.scheduled !== null && !plan.scheduledIsRecommended && (

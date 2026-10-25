@@ -11,6 +11,7 @@ import http from 'node:http';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { intersectionArea } from './tourGeometry.mjs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -95,7 +96,7 @@ function Fixture() {
 createRoot(document.getElementById('root')).render(<Fixture />);
 `;
 
-const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="bundle.css"></head>
+const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script>try{if(!localStorage.getItem("campuspilot.tour.seed")){localStorage.setItem("campuspilot.tour.v1","done");localStorage.setItem("campuspilot.tour.seed","1")}}catch(e){}</script><link rel="stylesheet" href="bundle.css"></head>
 <body><div id="root"></div><script type="module" src="bundle.js"></script></body></html>`;
 
 function findChrome() {
@@ -189,12 +190,19 @@ async function main() {
       });
     const evaluate = async (expression) => {
       const reply = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-      if (reply.result?.exceptionDetails) throw new Error(reply.result.exceptionDetails.text ?? 'eval failed');
+      if (reply.result?.exceptionDetails) {
+        const details = reply.result.exceptionDetails;
+        throw new Error((details.exception && details.exception.description) || details.text || 'eval failed');
+      }
       return reply.result?.result?.value;
     };
 
     await send('Page.enable');
     await send('Runtime.enable');
+    // A background tab reports visibilityState 'hidden', which throttles rAF and
+    // pauses the tour transitions; make the test page visible and reproducible.
+    await send('Page.bringToFront');
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     for (let attempt = 0; attempt < 40; attempt += 1) {
       if (await evaluate("document.querySelectorAll('#layout .cp-slot').length === 2 && !!document.querySelector('#app .cp-schedule')")) break;
@@ -2854,6 +2862,673 @@ async function main() {
       ),
       '',
     );
+    // --- product tour ---
+    const waitForApp = async () => {
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        if (await evaluate("Boolean(document.querySelector('#app .cp-header'))")) return true;
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      return false;
+    };
+    await evaluate(`(() => {
+      window.__cpGeom = (target, card) => {
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const t = target.getBoundingClientRect();
+        const visible =
+          Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0;
+        let overlap = 0;
+        let cardRect = null;
+        if (card) {
+          const c = card.getBoundingClientRect();
+          cardRect = { left: Math.round(c.left), top: Math.round(c.top), right: Math.round(c.right), bottom: Math.round(c.bottom) };
+          const w = Math.min(t.right, c.right) - Math.max(t.left, c.left);
+          const h = Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top);
+          overlap = w > 0 && h > 0 ? Math.round(w * h) : 0;
+        }
+        return {
+          visible,
+          overlap,
+          viewport: { vw, vh },
+          rect: { left: Math.round(t.left), top: Math.round(t.top), right: Math.round(t.right), bottom: Math.round(t.bottom) },
+          card: cardRect,
+          scrollY: Math.round(window.scrollY),
+        };
+      };
+      return true;
+    })()`);
+
+    const tourState = () =>
+      evaluate(`(() => {
+        const tour = document.querySelector('#app .cp-tour');
+        if (!tour) return null;
+        const card = tour.querySelector('.cp-tour__card');
+        const box = card.getBoundingClientRect();
+        return {
+          progress: ((tour.querySelector('.cp-tour__progress') || {}).textContent || '').trim(),
+          title: ((tour.querySelector('.cp-tour__title') || {}).textContent || '').trim(),
+          next: ((tour.querySelector('.cp-tour__next') || {}).textContent || '').trim(),
+          cardVisible: box.height > 0 && box.width > 0,
+          cardTop: Math.round(box.top),
+          reduced: tour.classList.contains('cp-tour--reduced'),
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+    const reloadTour = async (stored) => {
+      await evaluate(
+        stored === null
+          ? "localStorage.removeItem('campuspilot.tour.v1')"
+          : `localStorage.setItem('campuspilot.tour.v1', '${stored}')`,
+      );
+      await send('Page.reload', {});
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    };
+    const tourKey = async (key, code, keyCode) => {
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    };
+    const advanceTour = async (times) => {
+      for (let index = 0; index < times; index += 1) {
+        await evaluate(`(() => {
+          const next = document.querySelector('#app .cp-tour__next');
+          if (next) next.click();
+          return Boolean(next);
+        })()`);
+        await new Promise((resolve) => setTimeout(resolve, 420));
+      }
+    };
+
+    // --- mobile Where loop, isolated from every other step ---
+    await reloadTour(null);
+    await evaluate(`(() => {
+      const date = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(date, '2026-10-19');
+      date.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await advanceTour(5);
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await advanceTour(1);
+    const whereLoopStart = await tourState();
+    record(
+      'the isolated mobile loop reaches the where step',
+      whereLoopStart !== null && /8 of 11/.test(whereLoopStart.progress),
+      JSON.stringify(whereLoopStart && { progress: whereLoopStart.progress }),
+    );
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 812, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const viewport = await evaluate('({ innerWidth: window.innerWidth, clientWidth: document.documentElement.clientWidth })');
+      record(
+        `the mobile loop really uses a ${width}px viewport`,
+        viewport.innerWidth === width && viewport.clientWidth === width,
+        JSON.stringify({ width, ...viewport }),
+      );
+
+      const selected = await evaluate(`(() => {
+        const list = [...document.querySelectorAll('#app .cp-session')];
+        const active = list.find((item) => item.classList.contains('is-selected'));
+        if (active) return { clicked: false, count: list.length };
+        if (list[0]) list[0].click();
+        return { clicked: true, count: list.length };
+      })()`);
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const stillSelected = await evaluate("document.querySelectorAll('#app .cp-session.is-selected').length");
+      record(
+        `a real block stays selected at ${width}px`,
+        selected.count > 0 && stillSelected === 1,
+        JSON.stringify({ width, ...selected, stillSelected }),
+      );
+      const geoms = await evaluate(`(() => {
+        const where = document.querySelector('#app [data-tour="where"]');
+        const card = document.querySelector('#app .cp-tour__card');
+        if (!where || !card) return null;
+        const w = where.getBoundingClientRect();
+        const c = card.getBoundingClientRect();
+        return {
+          scrollY: Math.round(window.scrollY),
+          where: { top: Math.round(w.top), bottom: Math.round(w.bottom), height: Math.round(w.height) },
+          card: { top: Math.round(c.top), bottom: Math.round(c.bottom) },
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      })()`);
+      record(
+        `the selected where card is on screen and clear of the tour card at ${width}px`,
+        geoms !== null &&
+          geoms.where.top >= 0 &&
+          geoms.where.top < 812 - 40 &&
+          geoms.card.top >= geoms.where.top + 80 &&
+          geoms.overflow === 0,
+        JSON.stringify(geoms),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Back to a clean start for the remaining tour tests.
+    await reloadTour(null);
+    const welcome = await tourState();
+    record(
+      'the tour opens on the welcome step for a first visit',
+      welcome !== null &&
+        /1 of 11/.test(welcome.progress) &&
+        welcome.title === 'Build your first study plan' &&
+        welcome.cardVisible,
+      JSON.stringify(welcome),
+    );
+
+    const visibility = await evaluate("({ state: document.visibilityState, hidden: document.hidden })");
+    record('the test page is visible while the tour runs', visibility.state === 'visible' && visibility.hidden === false, JSON.stringify(visibility));
+
+    const wideCard = await evaluate(`(() => {
+      const card = document.querySelector('#app .cp-tour__card');
+      const box = card.getBoundingClientRect();
+      return {
+        width: Math.round(box.width),
+        center: Math.round(box.left + box.width / 2),
+        clientWidth: document.documentElement.clientWidth,
+        innerWidth: window.innerWidth,
+        scrollbar: window.innerWidth - document.documentElement.clientWidth,
+        scrollY: Math.round(window.scrollY),
+      };
+    })()`);
+    record(
+      'the welcome card is a centred column on a wide screen',
+      wideCard.width <= 400 && wideCard.width >= 300 && Math.abs(wideCard.center - wideCard.clientWidth / 2) <= 10,
+      JSON.stringify(wideCard),
+    );
+
+    await tourKey('ArrowRight', 'ArrowRight', 39);
+    const taskStep = await tourState();
+    record(
+      'the arrow keys move the tour forward',
+      taskStep !== null && /2 of 11/.test(taskStep.progress) && taskStep.title === 'Start with one task',
+      JSON.stringify(taskStep && { progress: taskStep.progress, title: taskStep.title }),
+    );
+
+    await tourKey('Escape', 'Escape', 27);
+    const afterEscape = await evaluate("(() => ({ tour: !!document.querySelector('#app .cp-tour'), stored: localStorage.getItem('campuspilot.tour.v1') }))()");
+    record(
+      'Escape skips the tour and stores the dismissal',
+      afterEscape.tour === false && afterEscape.stored === 'skipped',
+      JSON.stringify(afterEscape),
+    );
+
+    await send('Page.reload', {});
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    record('a skipped tour does not reopen on refresh', (await tourState()) === null, '');
+
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) { button.focus(); button.click(); } return 'ok'; })()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const replayed = await tourState();
+    record(
+      'Replay tour restarts from the first step',
+      replayed !== null && /1 of 11/.test(replayed.progress),
+      JSON.stringify(replayed && { progress: replayed.progress }),
+    );
+
+    await tourKey('Escape', 'Escape', 27);
+    const restoredFocus = await evaluate(`(() => {
+      const replay = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
+      const active = document.activeElement;
+      return {
+        onReplay: !!replay && active === replay,
+        activeTag: active ? active.tagName : null,
+        activeText: active ? (active.textContent || '').trim().slice(0, 24) : '',
+        replayExists: !!replay,
+        scrollY: Math.round(window.scrollY),
+      };
+    })()`);
+    record(
+      'skipping returns focus to the control that opened the tour',
+      restoredFocus.onReplay === true,
+      JSON.stringify(restoredFocus),
+    );
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) { button.focus(); button.click(); } return 'ok'; })()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    await advanceTour(5);
+    const atBuild = await tourState();
+    const buildFocus = await evaluate(`(() => {
+      const build = document.querySelector('[data-tour="build"]');
+      return { onBuild: document.activeElement === build, tag: document.activeElement ? document.activeElement.tagName : null };
+    })()`);
+    record(
+      'the build step hands keyboard focus to the real Build button',
+      atBuild !== null && /6 of 11/.test(atBuild.progress) && buildFocus.onBuild === true,
+      JSON.stringify({ progress: atBuild && atBuild.progress, buildFocus }),
+    );
+
+    // A failing validation must not count as a finished build.
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="number"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '0');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const afterInvalidBuild = await tourState();
+    record(
+      'a failed build leaves the tour on the build step',
+      afterInvalidBuild !== null && /6 of 11/.test(afterInvalidBuild.progress),
+      JSON.stringify(afterInvalidBuild && { progress: afterInvalidBuild.progress, title: afterInvalidBuild.title }),
+    );
+
+    // Restore a valid range, then press the real button with a real mouse click.
+    await evaluate(`(() => {
+      const date = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="date"]');
+      const setter2 = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter2.call(date, '2026-10-19');
+      date.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await evaluate(`(() => {
+      const input = document.querySelector('#app section[aria-labelledby="cp-range-heading"] input[type="number"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '7');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const stillFocused = await evaluate(`document.activeElement === document.querySelector('[data-tour="build"]')`);
+    await send('Input.dispatchKeyEvent', {
+      type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+      text: '\r', unmodifiedText: '\r',
+    });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    record('the Build button keeps focus for the keyboard activation', stillFocused === true, String(stillFocused));
+    const afterRealBuild = await tourState();
+    const sessionsAfterBuild = await evaluate("document.querySelectorAll('#app .cp-session').length");
+    record(
+      'a real build is not swallowed by the tour and advances it',
+      afterRealBuild !== null && /7 of 11/.test(afterRealBuild.progress) && sessionsAfterBuild > 0,
+      JSON.stringify({ progress: afterRealBuild && afterRealBuild.progress, sessions: sessionsAfterBuild }),
+    );
+
+    const anchorVisible = (selector) =>
+      evaluate(`(() => {
+        const node = document.querySelector(${JSON.stringify(selector)});
+        if (!node) return null;
+        const vw = document.documentElement.clientWidth;
+        const vh = document.documentElement.clientHeight;
+        const t = node.getBoundingClientRect();
+        const card = document.querySelector('#app .cp-tour__card');
+        const c = card ? card.getBoundingClientRect() : null;
+        const w = c ? Math.min(t.right, c.right) - Math.max(t.left, c.left) : 0;
+        const h = c ? Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top) : 0;
+        const area = w > 0 && h > 0 ? w * h : 0;
+        return {
+          visible: Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0,
+          overlap: area,
+          overlapLog: Math.round(area * 1000) / 1000,
+          viewport: { vw, vh },
+          rect: { left: Math.round(t.left), top: Math.round(t.top), right: Math.round(t.right), bottom: Math.round(t.bottom) },
+          scrollY: Math.round(window.scrollY),
+        };
+      })()`);
+
+    await evaluate("document.querySelector('#app .cp-tour__back').click()");
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const afterBack = await tourState();
+    record(
+      'going back from the results stays on the build step',
+      afterBack !== null && /6 of 11/.test(afterBack.progress),
+      JSON.stringify(afterBack && { progress: afterBack.progress }),
+    );
+
+    await tourKey('ArrowRight', 'ArrowRight', 39);
+    const afterBackArrow = await tourState();
+    record(
+      'the right arrow cannot skip the build step after going back',
+      afterBackArrow !== null && /6 of 11/.test(afterBackArrow.progress),
+      JSON.stringify(afterBackArrow && { progress: afterBackArrow.progress }),
+    );
+
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
+      if (button) { button.focus(); button.click(); }
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await advanceTour(5);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    const replayAtBuild = await tourState();
+    record(
+      'replaying with an existing plan does not skip the build step',
+      replayAtBuild !== null && /6 of 11/.test(replayAtBuild.progress),
+      JSON.stringify(replayAtBuild && { progress: replayAtBuild.progress }),
+    );
+
+    await tourKey('ArrowRight', 'ArrowRight', 39);
+    const replayArrow = await tourState();
+    record(
+      'the right arrow cannot skip the build step after a replay',
+      replayArrow !== null && /6 of 11/.test(replayArrow.progress),
+      JSON.stringify(replayArrow && { progress: replayArrow.progress }),
+    );
+
+    await evaluate("document.querySelector('[data-tour=\"build\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const afterRebuild = await tourState();
+    record(
+      'a build pressed while on the step advances to the results',
+      afterRebuild !== null && /7 of 11/.test(afterRebuild.progress),
+      JSON.stringify(afterRebuild && { progress: afterRebuild.progress }),
+    );
+
+    const geometryNegative = await evaluate(`(() => {
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      const measure = (node, card) => {
+        const t = node.getBoundingClientRect();
+        const c = card ? card.getBoundingClientRect() : null;
+        const w = c ? Math.min(t.right, c.right) - Math.max(t.left, c.left) : 0;
+        const h = c ? Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top) : 0;
+        return {
+          visible: Math.min(t.right, vw) - Math.max(t.left, 0) > 0 && Math.min(t.bottom, vh) - Math.max(t.top, 0) > 0,
+          overlap: w > 0 && h > 0 ? Math.round(w * h) : 0,
+        };
+      };
+      const card = document.querySelector('#app .cp-tour__card');
+      const probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;left:-400px;top:80px;width:100px;height:100px;';
+      document.body.appendChild(probe);
+      const offScreen = measure(probe, null);
+
+      const c = card.getBoundingClientRect();
+      // A sub-pixel overlap built with a transform, so layout rounding cannot
+      // collapse it to zero: 0.25px on each axis, a real positive intersection.
+      probe.style.left = String(c.right) + 'px';
+      probe.style.top = String(c.bottom) + 'px';
+      probe.style.transform = 'translate(-0.25px, -0.25px)';
+      const tiny = measure(probe, card);
+
+      // Far left of the card: horizontally separated, no overlap at all.
+      probe.style.left = String(c.left - 140) + 'px';
+      probe.style.top = String(c.top + 10) + 'px';
+      const separated = measure(probe, card);
+
+      probe.remove();
+      return {
+        offVisible: offScreen.visible,
+        tinyOverlap: tiny.overlap,
+        separatedOverlap: separated.overlap,
+      };
+    })()`);
+    const cardAnchor = { left: 100, top: 100, right: 300, bottom: 300 };
+    const geometryCases = {
+      quarterPixel: intersectionArea(cardAnchor, { left: 299.5, top: 299.5, right: 399.5, bottom: 399.5 }),
+      touching: intersectionArea(cardAnchor, { left: 300, top: 100, right: 400, bottom: 200 }),
+      separated: intersectionArea(cardAnchor, { left: 400, top: 100, right: 500, bottom: 200 }),
+      inside: intersectionArea(cardAnchor, { left: 150, top: 150, right: 250, bottom: 250 }),
+    };
+    record(
+      'a 0.25px² intersection counts as overlap while touching and separated cases do not',
+      geometryCases.quarterPixel === 0.25 &&
+        geometryCases.quarterPixel > 0 &&
+        geometryCases.touching === 0 &&
+        geometryCases.separated === 0 &&
+        Math.abs(geometryCases.inside - 10000) < 1e-9 &&
+        geometryNegative.offVisible === false &&
+        geometryNegative.separatedOverlap === 0,
+      JSON.stringify({ ...geometryCases, ...geometryNegative }),
+    );
+
+    await advanceTour(1);
+    const whereStep = await tourState();
+    const whereEmpty = await evaluate("document.querySelector('#app .cp-tour__body').textContent");
+    record(
+      'the where step admits the card is still empty without a selection',
+      whereStep !== null && /8 of 11/.test(whereStep.progress) && /No block is selected yet/.test(whereEmpty),
+      JSON.stringify({ progress: whereStep && whereStep.progress, empty: /No block is selected yet/.test(whereEmpty) }),
+    );
+
+    await evaluate("document.querySelectorAll('#app .cp-session')[0].click()");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const whereFilled = await evaluate(`(() => {
+      const body = document.querySelector('#app .cp-tour__body').textContent;
+      const card = document.querySelector('#app [data-tour="where"]');
+      const heading = card ? card.innerText : '';
+      return { body, headingHasWhere: /Where/.test(heading), headingHasRec: /Recommended study locations/.test(heading) };
+    })()`);
+    const recommendationCopy = await evaluate("(() => { const panel = document.querySelector('#app [data-tour=\"where\"]'); return panel ? panel.innerText : ''; })()");
+    record(
+      'recommendations describe a simulated block time, not live availability',
+      /recommended for this simulated block time/.test(recommendationCopy) && !/listed as open/i.test(recommendationCopy),
+      JSON.stringify({ text: recommendationCopy.slice(0, 80) }),
+    );
+
+    record(
+      'the where step follows a real selection',
+      whereFilled.headingHasWhere && whereFilled.headingHasRec && !/No block is selected yet/.test(whereFilled.body),
+      JSON.stringify({ headingHasWhere: whereFilled.headingHasWhere, headingHasRec: whereFilled.headingHasRec }),
+    );
+
+    await advanceTour(1);
+    const atMap = await tourState();
+    const mapBox = await evaluate(`(() => {
+      const map = document.querySelector('#app .cp-map-mount');
+      const card = document.querySelector('#app .cp-tour__card');
+      if (!map || !card) return null;
+      const m = map.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      return {
+        viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight },
+        target: { top: Math.round(m.top), bottom: Math.round(m.bottom) },
+        card: { top: Math.round(c.top), bottom: Math.round(c.bottom) },
+        overlap: Math.max(0, Math.min(m.bottom, c.bottom) - Math.max(m.top, c.top)),
+        covered: Math.max(0, Math.min(m.bottom, c.bottom) - Math.max(m.top, c.top)) > 0,
+        scrollY: Math.round(window.scrollY),
+        visible: m.top < window.innerHeight && m.bottom > 0,
+      };
+    })()`);
+    const mapAnchor = await anchorVisible('.cp-map-mount');
+    record(
+      'the map step points at the visible map',
+      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true && mapAnchor.overlap === 0,
+      JSON.stringify({ progress: atMap && atMap.progress, mapAnchor, mapBox }),
+    );
+    const markerStability = await evaluate(`(async () => {
+      const pins = [...document.querySelectorAll('#app .cp-map__pin')];
+      const before = pins.map((pin) => getComputedStyle(pin).transform);
+      const mount = document.querySelector('#app .cp-map-mount');
+      mount.classList.add('cp-tour-map');
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const after = pins.map((pin) => getComputedStyle(pin).transform);
+      mount.classList.remove('cp-tour-map');
+      return {
+        count: pins.length,
+        same: before.length === after.length && before.every((value, index) => value === after[index]),
+        dots: document.querySelectorAll('#app .cp-map__pin-dot').length,
+      };
+    })()`);
+    record(
+      'the marker effect leaves the Leaflet pin positioning untouched',
+      atMap !== null && /9 of 11/.test(atMap.progress) && markerStability.count > 0 && markerStability.same === true && markerStability.dots === markerStability.count,
+      JSON.stringify({ progress: atMap && atMap.progress, ...markerStability }),
+    );
+
+    await advanceTour(1);
+    const reservationStep = await tourState();
+    const reservationBox = await evaluate(`(() => {
+      const heading = document.querySelector('#app #cp-reservation-heading');
+      const card = document.querySelector('#app .cp-tour__card');
+      if (!heading || !card) return null;
+      const h = heading.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      return {
+        viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight },
+        target: { top: Math.round(h.top), bottom: Math.round(h.bottom) },
+        card: { top: Math.round(c.top), bottom: Math.round(c.bottom) },
+        overlap: Math.max(0, Math.min(h.bottom, c.bottom) - Math.max(h.top, c.top)),
+        covered: Math.max(0, Math.min(h.bottom, c.bottom) - Math.max(h.top, c.top)) > 0,
+        scrollY: Math.round(window.scrollY),
+        visible: h.top < window.innerHeight && h.bottom > 0,
+      };
+    })()`);
+    const reservationAnchor = await anchorVisible('#cp-reservation-heading');
+    record(
+      'the reservation step points at the visible planner',
+      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true && reservationAnchor.overlap === 0,
+      JSON.stringify({ progress: reservationStep && reservationStep.progress, reservationAnchor, reservationBox }),
+    );
+
+    await advanceTour(1);
+    const lastStep = await tourState();
+    record(
+      'the tour ends on the finish step',
+      lastStep !== null && /11 of 11/.test(lastStep.progress) && lastStep.next === 'Finish',
+      JSON.stringify(lastStep && { progress: lastStep.progress, next: lastStep.next }),
+    );
+    await evaluate("document.querySelector('#app .cp-tour__next').click()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const finished = await evaluate("(() => ({ tour: !!document.querySelector('#app .cp-tour'), stored: localStorage.getItem('campuspilot.tour.v1') }))()");
+    record(
+      'finishing closes the tour and records completion',
+      finished.tour === false && finished.stored === 'done',
+      JSON.stringify(finished),
+    );
+    await evaluate(`(() => {
+      const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour'));
+      if (button) { button.focus(); button.click(); }
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    const replayWipe = await evaluate(`(() => ({
+      wipes: document.querySelectorAll('#app .cp-tour__wipe').length,
+      progress: ((document.querySelector('#app .cp-tour__progress') || {}).textContent || '').trim(),
+    }))()`);
+    record(
+      'replaying the tour does not replay the chapter wipe',
+      replayWipe.wipes === 0 && /1 of 11/.test(replayWipe.progress),
+      JSON.stringify(replayWipe),
+    );
+    await tourKey('Escape', 'Escape', 27);
+
+    await send('Page.reload', {});
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    record('a finished tour does not reopen on refresh', (await tourState()) === null, '');
+
+    // Arrow keys inside a field move the caret instead of the tour.
+    await evaluate("(() => { const button = [...document.querySelectorAll('#app button')].find((b) => b.textContent.includes('Replay tour')); if (button) { button.focus(); button.click(); } return 'ok'; })()");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await advanceTour(1);
+    const arrowProbe = await evaluate(`(async () => {
+      const input = document.querySelector('#app form.cp-form input:not([type])');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'abc');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      input.setSelectionRange(2, 2);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return { before: input.selectionStart };
+    })()`);
+    await tourKey('ArrowLeft', 'ArrowLeft', 37);
+    const arrowAfter = await evaluate(`(() => {
+      const input = document.querySelector('#app form.cp-form input:not([type])');
+      const tour = document.querySelector('#app .cp-tour');
+      return {
+        caret: input.selectionStart,
+        progress: tour ? ((tour.querySelector('.cp-tour__progress') || {}).textContent || '').trim() : '',
+        focused: document.activeElement === input,
+      };
+    })()`);
+    record(
+      'arrow keys in a field move the caret, not the tour',
+      arrowAfter.focused === true && arrowAfter.caret === arrowProbe.before - 1 && /2 of 11/.test(arrowAfter.progress),
+      JSON.stringify({ ...arrowAfter, before: arrowProbe.before }),
+    );
+
+    // Narrow screens: the docked card must not cover the highlighted control.
+    await send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await advanceTour(1);
+    const narrowCover = await evaluate(`(() => {
+      const tabs = document.querySelector('#app .cp-modetabs');
+      const card = document.querySelector('#app .cp-tour__card');
+      if (!tabs || !card) return null;
+      const t = tabs.getBoundingClientRect();
+      const c = card.getBoundingClientRect();
+      const overlap = Math.min(t.bottom, c.bottom) - Math.max(t.top, c.top);
+      return {
+        progress: ((document.querySelector('#app .cp-tour__progress') || {}).textContent || '').trim(),
+        tabsTop: Math.round(t.top),
+        cardTop: Math.round(c.top),
+        covered: overlap > t.height * 0.5,
+      };
+    })()`);
+    record(
+      'the narrow card does not cover the repeating tabs',
+      narrowCover !== null && /3 of 11/.test(narrowCover.progress) && narrowCover.covered === false,
+      JSON.stringify(narrowCover),
+    );
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    // Reduced motion keeps every step but drops the movement.
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+    await reloadTour(null);
+    const reducedState = await tourState();
+    const maskStyle = await evaluate(`(() => {
+      const mask = document.querySelector('#app .cp-tour__mask');
+      if (!mask) return null;
+      const style = getComputedStyle(mask);
+      return { animationName: style.animationName, background: style.backgroundColor };
+    })()`);
+    record(
+      'reduced motion disables the mask fade',
+      maskStyle !== null && maskStyle.animationName === 'none',
+      JSON.stringify(maskStyle),
+    );
+    record(
+      'reduced motion keeps the tour and marks it as still',
+      reducedState !== null && reducedState.reduced === true && /1 of 11/.test(reducedState.progress),
+      JSON.stringify(reducedState && { reduced: reducedState.reduced, progress: reducedState.progress }),
+    );
+
+    // Reduced motion must still bring the focused panel into view.
+    await evaluate('window.scrollTo(0, document.body.scrollHeight)');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await advanceTour(3);
+    const reducedTarget = await evaluate(`(() => {
+      const panel = document.querySelector('#app section[aria-labelledby="cp-range-heading"]');
+      if (!panel) return null;
+      const box = panel.getBoundingClientRect();
+      return { top: Math.round(box.top), visible: box.top < window.innerHeight && box.bottom > 0 };
+    })()`);
+    const reducedStep = await tourState();
+    record(
+      'reduced motion still scrolls the target into view',
+      reducedTarget !== null && reducedTarget.visible === true && /4 of 11/.test(reducedStep.progress),
+      JSON.stringify({ ...reducedTarget, progress: reducedStep && reducedStep.progress }),
+    );
+
+    for (const width of [320, 375]) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 800, deviceScaleFactor: 1, mobile: true });
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      const narrowTour = await tourState();
+      record(
+        `the tour card fits a ${width}px viewport without overflow`,
+        narrowTour !== null && narrowTour.cardVisible && narrowTour.overflow === 0,
+        JSON.stringify(narrowTour && { width, overflow: narrowTour.overflow, cardTop: narrowTour.cardTop }),
+      );
+    }
+    await send('Emulation.clearDeviceMetricsOverride', {});
+    await send('Emulation.setEmulatedMedia', { features: [] });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
   } finally {
     if (socket) socket.close();
     chrome.kill();
