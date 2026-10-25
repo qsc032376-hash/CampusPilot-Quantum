@@ -11,6 +11,7 @@ import { TaskModeSwitch } from './components/TaskModeSwitch.tsx';
 import { OptionalDetails } from './components/OptionalDetails.tsx';
 import { ScheduleIntensitySwitch } from './components/ScheduleIntensitySwitch.tsx';
 import { Tour } from './tour/Tour.tsx';
+import { AssistantPanel } from '../ai/AssistantPanel.tsx';
 import type { ScheduleIntensity } from '../features/schedule-intensity/index.ts';
 import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
@@ -523,6 +524,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
           />
         </div>
       </main>
+
+      <AssistantPanel />
 
       <Tour
         hasPlan={multi !== null}

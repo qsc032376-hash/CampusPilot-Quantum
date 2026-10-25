@@ -87,3 +87,7 @@ The browser test currently locates Chrome/Edge on Windows and uses ports 4180/92
 ## Team workflow
 
 Share this single repository. Commit source files and `package-lock.json`; do not share `node_modules` or `dist`. Each teammate runs `npm ci` on their own operating system. Use `npm install` only when intentionally changing dependencies, and commit the updated lockfile. Run tests and build before merging changes.
+
+## Assistant chat UI preview
+
+The floating assistant button and chat panel are a visual preview only. There is no AI service connection, backend endpoint, model configuration, or schedule-writing behavior in this version. The composer is disabled and messages are not sent. The product tour introduces the preview with its existing spotlight effect.

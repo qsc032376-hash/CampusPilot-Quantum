@@ -148,6 +148,19 @@ export const TOUR_STEPS: TourStep[] = [
     effect: 'iris',
   },
   {
+    id: 'assistant',
+    chapter: 'explore',
+    name: 'Assistant preview',
+    title: 'A preview of the chat window',
+    body: [
+      'This is a visual preview of the scheduling assistant chat. The AI is not connected yet, so messages are not sent and no schedule changes are made.',
+      'Open the assistant panel after the tour to see its layout. This spotlight only introduces the interface and sends no requests.',
+    ],
+    anchor: '[data-tour="assistant"]',
+    effect: 'iris',
+    hint: 'Chat window preview only · no AI connection or schedule changes.',
+  },
+  {
     id: 'done',
     chapter: 'explore',
     name: 'Finished',
