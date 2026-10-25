@@ -23,9 +23,11 @@ The Dashboard owns the selection. Build, one-off task changes, series changes an
 - `intense`: original earliest-deadline/ID greedy placement, no added gaps.
 - `relaxed`: first obtain that same baseline plan, preserving its placed-task set, chronological order, failures, durations, location allocation and fixed-event conflicts. Then delay blocks within their existing daily window and deadline to aim for 15 elapsed minutes between consecutive study blocks.
 - Reserve a legal zero-gap suffix backwards; forward placement cannot exceed those bounds. This protects later tasks from being displaced by earlier breaks. Original starts are lower bounds, preserving notBefore and occurrence dates.
-- Existing elapsed gaps, including time occupied by a class/unavailable event, count toward the target. No mandatory buffer before the first block or after the last.
+- Classes and unavailable periods are not rest. When a block has to move past a fixed event, it starts a full 15 minutes after that event ends instead of the moment it lets out, and a block that fits before an event is pulled earlier when a feasible slot exists so the buffer survives.
+- The first block also gets that buffer when it comes after an event, but no buffer is required before the window start, so the day may still begin immediately. Nothing is required after the last block either.
+- 15 minutes is a soft target: it is shortened when keeping it would miss a deadline or drop a task. Every placed task still ends by its deadline, and the baseline placed-task set is preserved.
 - Prefer earlier chronological breaks. Shorten a later break only as needed to keep the already-placed suffix feasible. With three one-hour blocks and 20 minutes slack, gaps are 15 and 5 minutes; with no slack both are zero. This is deterministic, not a global fairness optimizer.
 - No high-priority exemption preference in this version. Priority never changes the existing task order. Every priority receives the same task-preserving fallback.
 - Each day is processed independently through the existing New York daily windows/DST resolver. Missed occurrences remain unscheduled; no deadline extension, splitting or spillover is introduced.
 
-Tests: `node --test tests/schedule-intensity.test.ts`.
+Tests: `node --test tests/schedule-intensity.test.ts tests/relaxed-breaks.test.ts tests/relaxed-first-block.test.ts`.

@@ -14,7 +14,7 @@ export function generateSchedule(
     throw new Error('Schedule intensity must be relaxed or intense.');
   }
   const result = generateMockSchedule(request);
-  if (intensity === 'intense' || result.blocks.length < 2) return result;
+  if (intensity === 'intense' || result.blocks.length === 0) return result;
   const obstacles = [...request.classes, ...request.unavailablePeriods]
     .map(event => ({ start: Date.parse(event.start), end: Date.parse(event.end) }))
     .sort((a, b) => a.start - b.start);
@@ -39,15 +39,37 @@ export function generateSchedule(
   }
   // Prefer earlier chronological breaks. A later break is shortened only when
   // retaining it would lose a baseline task; task order and placement set stay
-  // fixed. Natural elapsed gaps count toward the same 15-minute target.
-  for (let i = 1; i < blocks.length; i += 1) {
+  // fixed. Classes and unavailable periods are not rest: passing one restarts
+  // the 15-minute target after it ends, and a block that fits before one is
+  // pulled earlier when that keeps the buffer without breaking its release
+  // time. The target is soft, so a tight day keeps deadlines over breaks.
+  for (let i = 0; i < blocks.length; i += 1) {
     const original = Date.parse(blocks[i].start);
-    const previousEnd = Date.parse(blocks[i - 1].end);
-    let candidate = Math.max(original, previousEnd + BREAK_MS);
+    // The first block only has the window start behind it; later blocks also
+    // have to keep the break from the previous study block.
+    const previousEnd = i === 0 ? Date.parse(request.windowStart) : Date.parse(blocks[i - 1].end);
+    // A block may never start before its own release time, even when moving
+    // earlier would buy the pre-class buffer.
+    const released = tasks.get(blocks[i].taskId)!.notBefore;
+    const release = released === undefined ? Date.parse(request.windowStart) : Date.parse(released);
+    const floor = Math.max(release, i === 0 ? previousEnd : previousEnd + BREAK_MS);
+    let candidate = Math.max(original, floor);
     for (const obstacle of obstacles) {
-      if (obstacle.end <= candidate) continue;
-      if (candidate + durations[i] <= obstacle.start) break;
-      candidate = obstacle.end;
+      // Only events that finished strictly before the previous block are
+      // irrelevant; one that ends exactly at it still resets the break.
+      if (obstacle.end < previousEnd) continue;
+      if (obstacle.start >= candidate + durations[i]) {
+        // The block fits before the event but would sit right against it; pull
+        // it earlier when that is allowed and buys the buffer.
+        const earlier = obstacle.start - durations[i] - BREAK_MS;
+        if (candidate + durations[i] + BREAK_MS > obstacle.start && earlier >= floor && earlier < candidate) {
+          candidate = earlier;
+        }
+        break;
+      }
+      // A class is not rest. Passing one moves the block to a full break after
+      // the class ends instead of starting the moment it lets out.
+      candidate = Math.max(candidate, obstacle.end + BREAK_MS);
     }
     candidate = Math.min(candidate, latest[i]);
     blocks[i].start = new Date(candidate).toISOString();
