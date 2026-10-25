@@ -1,8 +1,8 @@
 /* First-run product tour: dark mask, iris spotlight, chapter wipe. */
 
 .cp-tour {
-  --cp-tour-ink: #2a0d12;
-  --cp-tour-warm: #fdfaf4;
+  --cp-tour-ink: #1f2325;
+  --cp-tour-warm: #faf9f6;
   --cp-tour-accent: #a51d2d;
   position: fixed;
   inset: 0;
@@ -13,7 +13,7 @@
 .cp-tour__mask {
   position: absolute;
   inset: 0;
-  background: rgba(28, 8, 12, 0);
+  background: rgba(18, 20, 22, 0);
   animation: cp-tour-mask-in 320ms ease-out forwards;
 }
 
@@ -22,15 +22,15 @@
 }
 
 @keyframes cp-tour-mask-in {
-  from { background: rgba(28, 8, 12, 0); }
-  to { background: rgba(28, 8, 12, 0.72); }
+  from { background: rgba(18, 20, 22, 0); }
+  to { background: rgba(18, 20, 22, 0.72); }
 }
 
 /* The spotlight is a transparent box whose huge shadow paints the mask. */
 .cp-tour__spot {
   position: absolute;
   border-radius: 14px;
-  box-shadow: 0 0 0 200vmax rgba(28, 8, 12, 0.72), 0 0 0 1px rgba(253, 250, 244, 0.55) inset;
+  box-shadow: 0 0 0 200vmax rgba(18, 20, 22, 0.72), 0 0 0 1px rgba(250, 249, 246, 0.5) inset;
   transition:
     top 380ms cubic-bezier(0.22, 1, 0.36, 1),
     left 380ms cubic-bezier(0.22, 1, 0.36, 1),
@@ -41,8 +41,8 @@
 }
 
 @keyframes cp-tour-iris {
-  from { box-shadow: 0 0 0 200vmax rgba(28, 8, 12, 0.72), 0 0 0 14px rgba(253, 250, 244, 0.18) inset; }
-  to { box-shadow: 0 0 0 200vmax rgba(28, 8, 12, 0.72), 0 0 0 1px rgba(253, 250, 244, 0.55) inset; }
+  from { box-shadow: 0 0 0 200vmax rgba(18, 20, 22, 0.72), 0 0 0 10px rgba(250, 249, 246, 0.14) inset; }
+  to { box-shadow: 0 0 0 200vmax rgba(18, 20, 22, 0.72), 0 0 0 1px rgba(250, 249, 246, 0.5) inset; }
 }
 
 /* Border trace: a warm stroke sweeps the edge once. */
@@ -51,7 +51,7 @@
   position: absolute;
   inset: -2px;
   border-radius: 16px;
-  border: 2px solid rgba(253, 250, 244, 0.85);
+  border: 2px solid rgba(250, 249, 246, 0.7);
   mask-image: linear-gradient(130deg, transparent 42%, #000 50%, transparent 58%);
   mask-size: 320% 320%;
   animation: cp-tour-trace 900ms ease-out 1;
@@ -69,13 +69,13 @@
   position: absolute;
   inset: -8px;
   border-radius: 20px;
-  box-shadow: 0 0 0 0 rgba(165, 29, 45, 0.45);
+  box-shadow: 0 0 0 0 rgba(165, 29, 45, 0.24);
   animation: cp-tour-pulse 1200ms ease-out 1;
 }
 
 @keyframes cp-tour-pulse {
-  from { box-shadow: 0 0 0 0 rgba(165, 29, 45, 0.45); }
-  to { box-shadow: 0 0 0 22px rgba(165, 29, 45, 0); }
+  from { box-shadow: 0 0 0 0 rgba(165, 29, 45, 0.24); }
+  to { box-shadow: 0 0 0 14px rgba(165, 29, 45, 0); }
 }
 
 .cp-tour__card {
@@ -89,7 +89,7 @@
   border-radius: 14px;
   background: var(--cp-tour-warm);
   color: var(--cp-tour-ink);
-  box-shadow: 0 18px 48px rgba(42, 13, 18, 0.34);
+  box-shadow: 0 18px 48px rgba(20, 22, 24, 0.26);
   pointer-events: auto;
   animation: cp-tour-card 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -149,7 +149,7 @@
   margin: 0 0 8px;
   font-size: 13px;
   line-height: 1.5;
-  color: #4a3a3d;
+  color: #3a3f41;
 }
 
 .cp-tour__hint {
@@ -187,7 +187,7 @@
 .cp-tour__skip {
   border-color: transparent;
   background: transparent;
-  color: #7a6a6d;
+  color: #6b7174;
 }
 
 .cp-tour__next {
@@ -206,7 +206,7 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(100deg, rgba(253, 250, 244, 0) 0%, rgba(253, 250, 244, 0.92) 45%, rgba(165, 29, 45, 0.35) 55%, rgba(253, 250, 244, 0) 100%);
+  background: linear-gradient(100deg, rgba(250, 249, 246, 0) 0%, rgba(250, 249, 246, 0.92) 45%, rgba(165, 29, 45, 0.14) 55%, rgba(250, 249, 246, 0) 100%);
   transform: translateX(-110%);
   animation: cp-tour-wipe 620ms cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
@@ -226,7 +226,7 @@
 .cp-tour__playhead {
   position: absolute;
   width: 2px;
-  background: linear-gradient(180deg, rgba(165, 29, 45, 0), rgba(165, 29, 45, 0.8), rgba(165, 29, 45, 0));
+  background: linear-gradient(180deg, rgba(31, 35, 37, 0), rgba(31, 35, 37, 0.5), rgba(31, 35, 37, 0));
   animation: cp-tour-playhead 1600ms ease-in-out 1;
 }
 
@@ -295,7 +295,7 @@
 
 .cp-tour--reduced .cp-tour__mask {
   animation: none !important;
-  background: rgba(28, 8, 12, 0.72);
+  background: rgba(18, 20, 22, 0.72);
 }
 
 .cp-tour--reduced .cp-tour__mask--holed {
