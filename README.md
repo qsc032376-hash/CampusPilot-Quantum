@@ -87,3 +87,46 @@ The browser test currently locates Chrome/Edge on Windows and uses ports 4180/92
 ## Team workflow
 
 Share this single repository. Commit source files and `package-lock.json`; do not share `node_modules` or `dist`. Each teammate runs `npm ci` on their own operating system. Use `npm install` only when intentionally changing dependencies, and commit the updated lockfile. Run tests and build before merging changes.
+
+## AI assistant
+
+The assistant is a Vercel Node Function at `api/assistant.ts`, called by the browser as `POST /api/assistant`. It turns a plain description into structured task drafts; the planner itself is unchanged, and nothing is added until the user confirms the preview.
+
+### Server environment
+
+Set these in the Vercel project (Project Settings → Environment Variables). They are read only by the function:
+
+| Variable | Purpose |
+| --- | --- |
+| `AI_API_KEY` | Model key. Server only — never prefix it with `VITE_`, which would inline it into the browser bundle. |
+| `AI_BASE_URL` | OpenAI-compatible base URL, e.g. `https://api.openai.com/v1` or `https://api.deepseek.com/v1`. |
+| `AI_MODEL` | Model name, e.g. `gpt-4o-mini` or `deepseek-chat`. |
+
+When any of the three is missing the function answers `503 {"error":"unconfigured"}` and the panel shows `AI 助手尚未配置 / The AI assistant is not configured on this deployment` instead of inventing a reply.
+
+### Running locally
+
+`npm run dev` only serves the static app, so `/api/assistant` is not available there and the panel reports an unreachable assistant. To exercise the function locally, use the Vercel CLI:
+
+```sh
+npm i -g vercel
+vercel dev
+```
+
+`vercel dev` serves the Vite app and the `api/` function on the same origin. No `vercel.json` or Vite proxy is required: Vercel detects `api/*.ts` automatically, and the function is only reachable through that deployment.
+
+### Privacy
+
+The chat text and the current schedule context are sent to the configured AI service for the duration of the request. Nothing is stored: the function keeps no logs of message content, and the browser keeps no transcript beyond the open panel.
+
+### Rate limiting (not configured)
+
+`api/assistant.ts` caps the body size (16 KB, 12 messages, 2000 characters each), the upstream timeout (20 s) and the reply length (600 tokens). It has **no per-user or per-IP rate limit**, so a public URL can be called repeatedly and bill every model request. A process-memory counter is not a fix on serverless hosts: instances are recycled and requests are spread across them.
+
+Minimum options, all outside this repository:
+
+- Vercel Firewall / WAF rate limiting on the `/api/assistant` route (plan-dependent).
+- Vercel KV or Upstash Redis with a token-bucket check inside the function (`KV_REST_API_URL` + `KV_REST_API_TOKEN`, or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`).
+- A Cloudflare Worker or API gateway in front of the function with per-IP limits.
+
+Until one of those exists, treat the endpoint as unbounded: keep the deployment private, or add the platform limit before sharing the URL.

@@ -11,6 +11,7 @@ import { TaskModeSwitch } from './components/TaskModeSwitch.tsx';
 import { OptionalDetails } from './components/OptionalDetails.tsx';
 import { ScheduleIntensitySwitch } from './components/ScheduleIntensitySwitch.tsx';
 import { Tour } from './tour/Tour.tsx';
+import { AssistantPanel } from '../ai/AssistantPanel.tsx';
 import type { ScheduleIntensity } from '../features/schedule-intensity/index.ts';
 import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
@@ -192,6 +193,11 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
 
   function handleAddTask(draft: TaskDraft) {
     applyRequest({ ...request, tasks: [...request.tasks, { id: makeTaskId(), ...draft }] });
+  }
+
+  /** Assistant drafts only reach state after the panel's confirm step. */
+  function handleAddDrafts(drafts: TaskDraft[]) {
+    applyRequest({ ...request, tasks: [...request.tasks, ...drafts.map((draft) => ({ id: makeTaskId(), ...draft }))] });
   }
 
   function handleRemoveTask(id: string) {
@@ -523,6 +529,13 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
           />
         </div>
       </main>
+
+      <AssistantPanel
+        onApply={handleAddDrafts}
+        today={range.startDate}
+        windowStart={windowStart}
+        locationNames={request.locations.map((location) => location.name)}
+      />
 
       <Tour
         hasPlan={multi !== null}

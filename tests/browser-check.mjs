@@ -2958,7 +2958,7 @@ async function main() {
     const whereLoopStart = await tourState();
     record(
       'the isolated mobile loop reaches the where step',
-      whereLoopStart !== null && /8 of 11/.test(whereLoopStart.progress),
+      whereLoopStart !== null && /8 of 12/.test(whereLoopStart.progress),
       JSON.stringify(whereLoopStart && { progress: whereLoopStart.progress }),
     );
 
@@ -3018,7 +3018,7 @@ async function main() {
     record(
       'the tour opens on the welcome step for a first visit',
       welcome !== null &&
-        /1 of 11/.test(welcome.progress) &&
+        /1 of 12/.test(welcome.progress) &&
         welcome.title === 'Build your first study plan' &&
         welcome.cardVisible,
       JSON.stringify(welcome),
@@ -3049,7 +3049,7 @@ async function main() {
     const taskStep = await tourState();
     record(
       'the arrow keys move the tour forward',
-      taskStep !== null && /2 of 11/.test(taskStep.progress) && taskStep.title === 'Start with one task',
+      taskStep !== null && /2 of 12/.test(taskStep.progress) && taskStep.title === 'Start with one task',
       JSON.stringify(taskStep && { progress: taskStep.progress, title: taskStep.title }),
     );
 
@@ -3070,7 +3070,7 @@ async function main() {
     const replayed = await tourState();
     record(
       'Replay tour restarts from the first step',
-      replayed !== null && /1 of 11/.test(replayed.progress),
+      replayed !== null && /1 of 12/.test(replayed.progress),
       JSON.stringify(replayed && { progress: replayed.progress }),
     );
 
@@ -3102,7 +3102,7 @@ async function main() {
     })()`);
     record(
       'the build step hands keyboard focus to the real Build button',
-      atBuild !== null && /6 of 11/.test(atBuild.progress) && buildFocus.onBuild === true,
+      atBuild !== null && /6 of 12/.test(atBuild.progress) && buildFocus.onBuild === true,
       JSON.stringify({ progress: atBuild && atBuild.progress, buildFocus }),
     );
 
@@ -3120,7 +3120,7 @@ async function main() {
     const afterInvalidBuild = await tourState();
     record(
       'a failed build leaves the tour on the build step',
-      afterInvalidBuild !== null && /6 of 11/.test(afterInvalidBuild.progress),
+      afterInvalidBuild !== null && /6 of 12/.test(afterInvalidBuild.progress),
       JSON.stringify(afterInvalidBuild && { progress: afterInvalidBuild.progress, title: afterInvalidBuild.title }),
     );
 
@@ -3153,7 +3153,7 @@ async function main() {
     const sessionsAfterBuild = await evaluate("document.querySelectorAll('#app .cp-session').length");
     record(
       'a real build is not swallowed by the tour and advances it',
-      afterRealBuild !== null && /7 of 11/.test(afterRealBuild.progress) && sessionsAfterBuild > 0,
+      afterRealBuild !== null && /7 of 12/.test(afterRealBuild.progress) && sessionsAfterBuild > 0,
       JSON.stringify({ progress: afterRealBuild && afterRealBuild.progress, sessions: sessionsAfterBuild }),
     );
 
@@ -3184,7 +3184,7 @@ async function main() {
     const afterBack = await tourState();
     record(
       'going back from the results stays on the build step',
-      afterBack !== null && /6 of 11/.test(afterBack.progress),
+      afterBack !== null && /6 of 12/.test(afterBack.progress),
       JSON.stringify(afterBack && { progress: afterBack.progress }),
     );
 
@@ -3192,7 +3192,7 @@ async function main() {
     const afterBackArrow = await tourState();
     record(
       'the right arrow cannot skip the build step after going back',
-      afterBackArrow !== null && /6 of 11/.test(afterBackArrow.progress),
+      afterBackArrow !== null && /6 of 12/.test(afterBackArrow.progress),
       JSON.stringify(afterBackArrow && { progress: afterBackArrow.progress }),
     );
 
@@ -3207,7 +3207,7 @@ async function main() {
     const replayAtBuild = await tourState();
     record(
       'replaying with an existing plan does not skip the build step',
-      replayAtBuild !== null && /6 of 11/.test(replayAtBuild.progress),
+      replayAtBuild !== null && /6 of 12/.test(replayAtBuild.progress),
       JSON.stringify(replayAtBuild && { progress: replayAtBuild.progress }),
     );
 
@@ -3215,7 +3215,7 @@ async function main() {
     const replayArrow = await tourState();
     record(
       'the right arrow cannot skip the build step after a replay',
-      replayArrow !== null && /6 of 11/.test(replayArrow.progress),
+      replayArrow !== null && /6 of 12/.test(replayArrow.progress),
       JSON.stringify(replayArrow && { progress: replayArrow.progress }),
     );
 
@@ -3224,7 +3224,7 @@ async function main() {
     const afterRebuild = await tourState();
     record(
       'a build pressed while on the step advances to the results',
-      afterRebuild !== null && /7 of 11/.test(afterRebuild.progress),
+      afterRebuild !== null && /7 of 12/.test(afterRebuild.progress),
       JSON.stringify(afterRebuild && { progress: afterRebuild.progress }),
     );
 
@@ -3291,7 +3291,7 @@ async function main() {
     const whereEmpty = await evaluate("document.querySelector('#app .cp-tour__body').textContent");
     record(
       'the where step admits the card is still empty without a selection',
-      whereStep !== null && /8 of 11/.test(whereStep.progress) && /No block is selected yet/.test(whereEmpty),
+      whereStep !== null && /8 of 12/.test(whereStep.progress) && /No block is selected yet/.test(whereEmpty),
       JSON.stringify({ progress: whereStep && whereStep.progress, empty: /No block is selected yet/.test(whereEmpty) }),
     );
 
@@ -3337,7 +3337,7 @@ async function main() {
     const mapAnchor = await anchorVisible('.cp-map-mount');
     record(
       'the map step points at the visible map',
-      atMap !== null && /9 of 11/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true && mapAnchor.overlap === 0,
+      atMap !== null && /9 of 12/.test(atMap.progress) && mapAnchor !== null && mapAnchor.visible === true && mapAnchor.overlap === 0,
       JSON.stringify({ progress: atMap && atMap.progress, mapAnchor, mapBox }),
     );
     const markerStability = await evaluate(`(async () => {
@@ -3356,7 +3356,7 @@ async function main() {
     })()`);
     record(
       'the marker effect leaves the Leaflet pin positioning untouched',
-      atMap !== null && /9 of 11/.test(atMap.progress) && markerStability.count > 0 && markerStability.same === true && markerStability.dots === markerStability.count,
+      atMap !== null && /9 of 12/.test(atMap.progress) && markerStability.count > 0 && markerStability.same === true && markerStability.dots === markerStability.count,
       JSON.stringify({ progress: atMap && atMap.progress, ...markerStability }),
     );
 
@@ -3381,15 +3381,24 @@ async function main() {
     const reservationAnchor = await anchorVisible('#cp-reservation-heading');
     record(
       'the reservation step points at the visible planner',
-      reservationStep !== null && /10 of 11/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true && reservationAnchor.overlap === 0,
+      reservationStep !== null && /10 of 12/.test(reservationStep.progress) && reservationAnchor !== null && reservationAnchor.visible === true && reservationAnchor.overlap === 0,
       JSON.stringify({ progress: reservationStep && reservationStep.progress, reservationAnchor, reservationBox }),
+    );
+
+    await advanceTour(1);
+    const assistantStep = await tourState();
+    const aiRequests = await evaluate("performance.getEntriesByType('resource').filter((entry) => entry.name.includes('/api/assistant')).length");
+    record(
+      'the tour introduces the assistant without calling it',
+      assistantStep !== null && /11 of 12/.test(assistantStep.progress) && aiRequests === 0,
+      JSON.stringify({ progress: assistantStep && assistantStep.progress, aiRequests }),
     );
 
     await advanceTour(1);
     const lastStep = await tourState();
     record(
       'the tour ends on the finish step',
-      lastStep !== null && /11 of 11/.test(lastStep.progress) && lastStep.next === 'Finish',
+      lastStep !== null && /12 of 12/.test(lastStep.progress) && lastStep.next === 'Finish',
       JSON.stringify(lastStep && { progress: lastStep.progress, next: lastStep.next }),
     );
     await evaluate("document.querySelector('#app .cp-tour__next').click()");
@@ -3412,7 +3421,7 @@ async function main() {
     }))()`);
     record(
       'replaying the tour does not replay the chapter wipe',
-      replayWipe.wipes === 0 && /1 of 11/.test(replayWipe.progress),
+      replayWipe.wipes === 0 && /1 of 12/.test(replayWipe.progress),
       JSON.stringify(replayWipe),
     );
     await tourKey('Escape', 'Escape', 27);
@@ -3447,7 +3456,7 @@ async function main() {
     })()`);
     record(
       'arrow keys in a field move the caret, not the tour',
-      arrowAfter.focused === true && arrowAfter.caret === arrowProbe.before - 1 && /2 of 11/.test(arrowAfter.progress),
+      arrowAfter.focused === true && arrowAfter.caret === arrowProbe.before - 1 && /2 of 12/.test(arrowAfter.progress),
       JSON.stringify({ ...arrowAfter, before: arrowProbe.before }),
     );
 
@@ -3471,7 +3480,7 @@ async function main() {
     })()`);
     record(
       'the narrow card does not cover the repeating tabs',
-      narrowCover !== null && /3 of 11/.test(narrowCover.progress) && narrowCover.covered === false,
+      narrowCover !== null && /3 of 12/.test(narrowCover.progress) && narrowCover.covered === false,
       JSON.stringify(narrowCover),
     );
     await send('Emulation.clearDeviceMetricsOverride', {});
@@ -3494,7 +3503,7 @@ async function main() {
     );
     record(
       'reduced motion keeps the tour and marks it as still',
-      reducedState !== null && reducedState.reduced === true && /1 of 11/.test(reducedState.progress),
+      reducedState !== null && reducedState.reduced === true && /1 of 12/.test(reducedState.progress),
       JSON.stringify(reducedState && { reduced: reducedState.reduced, progress: reducedState.progress }),
     );
 
@@ -3511,7 +3520,7 @@ async function main() {
     const reducedStep = await tourState();
     record(
       'reduced motion still scrolls the target into view',
-      reducedTarget !== null && reducedTarget.visible === true && /4 of 11/.test(reducedStep.progress),
+      reducedTarget !== null && reducedTarget.visible === true && /4 of 12/.test(reducedStep.progress),
       JSON.stringify({ ...reducedTarget, progress: reducedStep && reducedStep.progress }),
     );
 
@@ -3528,6 +3537,103 @@ async function main() {
     await send('Emulation.clearDeviceMetricsOverride', {});
     await send('Emulation.setEmulatedMedia', { features: [] });
     await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // --- AI assistant panel (stubbed endpoint, no network) ---
+    await send('Page.reload', {});
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await evaluate(`(() => {
+      localStorage.setItem('campuspilot.tour.v1', 'done');
+      const original = window.fetch;
+      window.__aiMode = 'unconfigured';
+      window.__aiCalls = 0;
+      window.fetch = async (input, init) => {
+        if (String(input).includes('/api/assistant')) {
+          window.__aiCalls = (window.__aiCalls || 0) + 1;
+          if (window.__aiMode === 'unconfigured') {
+            return new Response(JSON.stringify({ error: 'unconfigured' }), { status: 503, headers: { 'Content-Type': 'application/json' } });
+          }
+          if (window.__aiMode === 'question') {
+            return new Response(JSON.stringify({ kind: 'question', question: 'When is it due?' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          return new Response(JSON.stringify({
+            kind: 'draft',
+            tasks: [{ title: 'Calculus review', durationMinutes: 120, dueAt: '2026-10-31T23:00:00-04:00' }],
+            notes: ['Deadline was inferred from your message.'],
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return original(input, init);
+      };
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const aiOpen = await evaluate(`(() => {
+      const button = document.querySelector('[data-tour="assistant"]');
+      if (!button) return 'missing';
+      button.click();
+      return 'ok';
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const aiPanel = await evaluate(`(() => {
+      const panel = document.querySelector('[data-tour="assistant-panel"]');
+      return { open: !!panel, disclosure: panel ? /sent to the configured AI service/.test(panel.innerText) : false };
+    })()`);
+    record('the assistant panel opens with a data disclosure', aiOpen === 'ok' && aiPanel.open && aiPanel.disclosure, JSON.stringify(aiPanel));
+
+    const aiType = async (value) => evaluate(`(() => {
+      const input = document.querySelector('#cp-ai-input');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(input, ${JSON.stringify(value)});
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('.cp-ai__send').click();
+      return 'ok';
+    })()`);
+
+    const aiBaseline = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
+    await evaluate("window.__aiMode = 'question'");
+    await aiType('write my essay');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const aiQuestion = await evaluate("document.querySelector('.cp-ai__question') ? document.querySelector('.cp-ai__question').textContent : ''");
+    const tasksBefore = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
+    const aiCalls = await evaluate("window.__aiCalls || 0");
+    record(
+      'the assistant asks a follow-up question first',
+      /When is it due/.test(aiQuestion) && tasksBefore === aiBaseline && aiCalls >= 1,
+      JSON.stringify({ aiQuestion, aiBaseline, tasksBefore, aiCalls }),
+    );
+
+    await evaluate("window.__aiMode = 'draft'");
+    await aiType('calculus review, two hours, due Friday night');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const draftState = await evaluate(`(() => {
+      const draft = document.querySelector('[data-tour="assistant-draft"]');
+      const tasks = document.querySelectorAll('#app .cp-tasks__row').length;
+      const confirm = document.querySelector('.cp-ai__confirm');
+      return { hasDraft: !!draft, text: draft ? draft.innerText.slice(0, 120) : '', tasks, confirm: !!confirm };
+    })()`);
+    record(
+      'a valid draft is previewed and nothing is added before confirming',
+      draftState.hasDraft && /Calculus review/.test(draftState.text) && draftState.tasks === aiBaseline,
+      JSON.stringify(draftState),
+    );
+
+    await evaluate("document.querySelector('.cp-ai__confirm').click()");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const afterConfirm = await evaluate("document.querySelectorAll('#app .cp-tasks__row').length");
+    record('confirming adds the drafted task to the existing list', afterConfirm === aiBaseline + 1, JSON.stringify({ afterConfirm }));
+
+    await evaluate("document.querySelector('.cp-ai__close').click()");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const aiClosed = await evaluate("!document.querySelector('[data-tour=\"assistant-panel\"]')");
+    record('the assistant panel closes', aiClosed === true, String(aiClosed));
+
+    await evaluate("window.__aiMode = 'unconfigured'");
+    await evaluate("document.querySelector('[data-tour=\"assistant\"]').click()");
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await aiType('one hour of reading');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const unconfigured = await evaluate("(() => { const node = document.querySelector('.cp-ai__state--warn'); return node ? node.textContent : ''; })()");
+    record('an unconfigured deployment says so instead of answering', /尚未配置|not configured/.test(unconfigured), JSON.stringify({ unconfigured }));
 
   } finally {
     if (socket) socket.close();

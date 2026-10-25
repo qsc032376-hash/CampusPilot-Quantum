@@ -148,6 +148,19 @@ export const TOUR_STEPS: TourStep[] = [
     effect: 'iris',
   },
   {
+    id: 'assistant',
+    chapter: 'explore',
+    name: 'AI assistant',
+    title: 'Describe it, check it, confirm it',
+    body: [
+      'The AI assistant turns a plain description into task drafts: describe the work and its deadline, answer a question if it asks, then check the list it proposes.',
+      'Nothing is added until you press the confirm button, and the assistant never builds the plan or changes existing blocks. The tour only shows this card — no request is sent.',
+    ],
+    anchor: '[data-tour="assistant"]',
+    effect: 'iris',
+    hint: 'Describe → review the draft → confirm, then build the plan yourself.',
+  },
+  {
     id: 'done',
     chapter: 'explore',
     name: 'Finished',
