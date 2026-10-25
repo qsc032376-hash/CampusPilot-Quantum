@@ -19,6 +19,8 @@
 
 .cp-tour__mask--holed {
   background: transparent;
+  /* The fade animation would otherwise paint its final colour into the hole. */
+  animation: none;
 }
 
 @keyframes cp-tour-mask-in {
@@ -123,6 +125,13 @@
     top: auto;
     bottom: 14px;
   }
+}
+
+/* When the card sits beside a target, its drop shadow would darken the
+   spotlight area; keep only a hairline edge so the cutout stays untouched. */
+.cp-tour__card--flush {
+  box-shadow: none;
+  border: 1px solid #e6e1d8;
 }
 
 .cp-tour__card:focus-visible {

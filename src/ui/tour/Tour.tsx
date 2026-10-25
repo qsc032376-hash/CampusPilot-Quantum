@@ -23,11 +23,22 @@ function store(value: 'done' | 'skipped'): void {
   }
 }
 
+/** Cutout padding keeps the frame off the target without inviting a big glow. */
+const CUTOUT_PADDING = 8;
+/** Minimum gap between the cutout and the viewport edge. */
+const VIEWPORT_MARGIN = 6;
+
 function measure(element: Element | null): Rect | null {
   if (!element) return null;
   const box = element.getBoundingClientRect();
   if (box.width <= 0 && box.height <= 0) return null;
-  return { top: box.top, left: box.left, width: box.width, height: box.height };
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const left = Math.max(VIEWPORT_MARGIN, box.left - CUTOUT_PADDING);
+  const top = Math.max(VIEWPORT_MARGIN, box.top - CUTOUT_PADDING);
+  const right = Math.min(vw - VIEWPORT_MARGIN, box.right + CUTOUT_PADDING);
+  const bottom = Math.min(vh - VIEWPORT_MARGIN, box.bottom + CUTOUT_PADDING);
+  return { top, left, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
 }
 
 function resolve(step: TourStep): Element | null {
@@ -329,7 +340,7 @@ export function Tour({ hasPlan, planRuns, hasSelection, replayKey }: TourProps) 
       {wipe > 0 ? <span key={`wipe-${wipe}`} className="cp-tour__wipe" aria-hidden="true" /> : null}
 
       <div
-        className={`cp-tour__card${rect ? '' : ' cp-tour__card--center'}`}
+        className={`cp-tour__card${rect ? ' cp-tour__card--flush' : ' cp-tour__card--center'}`}
         style={
           narrow || !cardPosition
             ? undefined
