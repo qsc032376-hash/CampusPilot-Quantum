@@ -25,13 +25,14 @@ test('relaxed adds 15 minutes only between study blocks', () => {
   assert.equal(out.blocks[2].end, new Date(at('12:30')).toISOString());
   assert.equal(relaxed(request('10:00', 1)).blocks[0].end, new Date(at('10:00')).toISOString());
 });
-test('natural class/unavailable gaps count and are not padded again', () => {
+test('class and unavailable time never counts toward the break', () => {
   for (const kind of ['classes', 'unavailablePeriods'] as const) {
     const r = request('13:00', 2);
     r[kind] = [{ id: 'event', title: 'event', start: at('10:00'), end: at('10:20') }];
-    assert.deepEqual(gaps(relaxed(r)), [20]);
+    // 10 minute block, 20 minute event, then a full 15 minute break.
+    assert.deepEqual(gaps(relaxed(r)), [35]);
     r[kind][0].end = at('10:10');
-    assert.deepEqual(gaps(relaxed(r)), [15]);
+    assert.deepEqual(gaps(relaxed(r)), [25]);
   }
 });
 test('shortens only necessary later gaps and waives when no slack remains', () => {
