@@ -340,7 +340,7 @@ export function Tour({ hasPlan, planRuns, hasSelection, replayKey }: TourProps) 
       {wipe > 0 ? <span key={`wipe-${wipe}`} className="cp-tour__wipe" aria-hidden="true" /> : null}
 
       <div
-        className={`cp-tour__card${rect ? '' : ' cp-tour__card--center'}`}
+        className={`cp-tour__card${rect ? ' cp-tour__card--flush' : ' cp-tour__card--center'}`}
         style={
           narrow || !cardPosition
             ? undefined

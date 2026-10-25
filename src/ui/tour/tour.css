@@ -127,6 +127,13 @@
   }
 }
 
+/* When the card sits beside a target, its drop shadow would darken the
+   spotlight area; keep only a hairline edge so the cutout stays untouched. */
+.cp-tour__card--flush {
+  box-shadow: none;
+  border: 1px solid #e6e1d8;
+}
+
 .cp-tour__card:focus-visible {
   outline: 3px solid var(--cp-tour-accent);
   outline-offset: 3px;
