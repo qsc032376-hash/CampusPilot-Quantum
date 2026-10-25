@@ -58,18 +58,37 @@ export function generateSchedule(
       // Only events that finished strictly before the previous block are
       // irrelevant; one that ends exactly at it still resets the break.
       if (obstacle.end < previousEnd) continue;
-      if (obstacle.start >= candidate + durations[i]) {
-        // The block fits before the event but would sit right against it; pull
-        // it earlier when that is allowed and buys the buffer.
-        const earlier = obstacle.start - durations[i] - BREAK_MS;
-        if (candidate + durations[i] + BREAK_MS > obstacle.start && earlier >= floor && earlier < candidate) {
-          candidate = earlier;
-        }
-        break;
-      }
+      if (obstacle.start >= candidate + durations[i]) break;
       // A class is not rest. Passing one moves the block to a full break after
       // the class ends instead of starting the moment it lets out.
       candidate = Math.max(candidate, obstacle.end + BREAK_MS);
+    }
+    // Try to keep a full break before the next fixed event. Every slot that
+    // ends a break before an event is considered, and the latest legal one
+    // wins; a slot that collides with another event does not end the search,
+    // because an earlier event may still leave a legal gap.
+    const overlapsEvent = (start: number, end: number) =>
+      obstacles.some((obstacle) => start < obstacle.end && end > obstacle.start);
+    // Moving earlier must not eat a break that is already secured: every fixed
+    // event that ends before the current start keeps its own 15 minutes first.
+    let postFloor = floor;
+    for (const obstacle of obstacles) {
+      if (obstacle.end > candidate) continue;
+      postFloor = Math.max(postFloor, obstacle.end + BREAK_MS);
+    }
+    let best = candidate;
+    for (const obstacle of obstacles) {
+      const slot = obstacle.start - durations[i] - BREAK_MS;
+      if (slot < postFloor || slot >= best) continue;
+      if (overlapsEvent(slot, slot + durations[i])) continue;
+      best = slot;
+    }
+    if (best < candidate) {
+      // Only accept the earlier slot when it really restores the soft break,
+      // otherwise the later, already-legal placement stays.
+      const nextEvent = obstacles.find((obstacle) => obstacle.start >= best + durations[i]);
+      const keepsBreak = nextEvent !== undefined && best + durations[i] + BREAK_MS <= nextEvent.start;
+      if (keepsBreak) candidate = best;
     }
     candidate = Math.min(candidate, latest[i]);
     blocks[i].start = new Date(candidate).toISOString();
