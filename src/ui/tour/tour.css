@@ -19,6 +19,8 @@
 
 .cp-tour__mask--holed {
   background: transparent;
+  /* The fade animation would otherwise paint its final colour into the hole. */
+  animation: none;
 }
 
 @keyframes cp-tour-mask-in {
