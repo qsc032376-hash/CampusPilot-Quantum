@@ -1,3 +1,4 @@
+import { QuantumComparison } from './components/QuantumComparison.tsx';
 import { useMemo, useState } from 'react';
 import type { ScheduleRequest } from '../types.ts';
 import type { MultiDayScheduleResponse } from '../features/multi-day-schedule/index.ts';
@@ -525,6 +526,11 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   />
 
             <QuantumOptimizer
+              request={request}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+  />
+            <QuantumComparison
               request={request}
               windowStart={windowStart}
               windowEnd={windowEnd}

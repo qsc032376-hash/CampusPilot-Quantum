@@ -33,9 +33,7 @@ export interface QuantumOptions {
   penalty?: number;
 }
 
-const API_BASE =
-  import.meta.env.VITE_QUANTUM_API_URL ??
-  "http://127.0.0.1:8000";
+const API_BASE = "http://127.0.0.1:8000";
 
 export async function optimizeSchedule(
   request: ScheduleRequest,
