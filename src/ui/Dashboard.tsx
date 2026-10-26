@@ -17,6 +17,7 @@ import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
+import { QuantumOptimizer } from './components/QuantumOptimizer.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
 import { RecommendedLocations } from './components/RecommendedLocations.tsx';
 import { ReservationPlanner } from './components/ReservationPlanner.tsx';
@@ -511,7 +512,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
         </div>
 
         <div className="cp-column">
-          <ScheduleResults
+            <ScheduleResults
             request={request}
             series={series}
             multi={multi}
@@ -521,8 +522,15 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             selectedId={selectedId}
             onSelect={handleSelectBlock}
             onSelectDate={handleSelectDate}
-          />
-        </div>
+  />
+
+            <QuantumOptimizer
+              request={request}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+  />
+</div>
+
       </main>
 
       <AssistantPanel />
