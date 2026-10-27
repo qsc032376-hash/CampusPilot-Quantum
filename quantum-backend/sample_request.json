@@ -1,0 +1,32 @@
+
+{
+  "windowStart": "2026-11-02T13:00:00-05:00",
+  "windowEnd": "2026-11-02T17:00:00-05:00",
+  "classes": [
+    {
+      "id": "class-1",
+      "title": "Example Math Class",
+      "start": "2026-11-02T14:00:00-05:00",
+      "end": "2026-11-02T15:00:00-05:00"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-1",
+      "title": "Study for Math 4181H",
+      "durationMinutes": 60,
+      "dueAt": "2026-11-02T17:00:00-05:00",
+      "priority": "high"
+    },
+    
+    {
+        "id": "task-2",
+        "title": "Complete Python Homework",
+        "durationMinutes": 30,
+        "dueAt": "2026-11-02T16:30:00-05:00",
+        "priority": "medium"
+    }  
+  ],
+  "unavailablePeriods": [],
+  "locations": []
+}

@@ -95,12 +95,17 @@ def solve_qaoa(
     maxiter=100,
     shots=2048,
     seed=42,
+    penalty=None,
 ):
+    
     """Optimize a QAOA circuit and sample candidate schedules."""
     if p < 1 or maxiter < 1 or shots < 1:
         raise ValueError("p, maxiter and shots must be positive.")
 
-    model = build_scheduling_qubo(candidates)
+    model = build_scheduling_qubo(
+    candidates,
+    penalty=penalty,
+)
     Q = model["Q"]
     n = len(candidates)
 

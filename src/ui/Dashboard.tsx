@@ -1,3 +1,5 @@
+import type { QuantumResult } from '../features/quantum-optimization/api.ts';
+import { QuantumSchedulePreview } from './components/QuantumSchedulePreview.tsx';
 import { QuantumComparison } from './components/QuantumComparison.tsx';
 import { useMemo, useState } from 'react';
 import type { ScheduleRequest } from '../types.ts';
@@ -67,6 +69,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [range, setRange] = useState<ScheduleRange>(initialRange);
   const [multi, setMulti] = useState<MultiDayScheduleResponse | null>(null);
   /** True once a plan has succeeded; drives recovery after an invalid edit. */
+  const [quantumPreview, setQuantumPreview] =
+  useState<QuantumResult | null>(null);
   const [hasBuilt, setHasBuilt] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(initialRange.startDate);
@@ -273,6 +277,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
    */
   function handleSelectDate(date: string) {
     setSelectedDate(date);
+    setQuantumPreview(null);
   }
 
   function handleSelectBlock(id: string | null) {
@@ -510,6 +515,11 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             selectedId={selectedId}
             onSelect={handleSelectBlock}
           />
+          <QuantumSchedulePreview
+            result={quantumPreview}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+/>
         </div>
 
         <div className="cp-column">
@@ -529,6 +539,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
               request={request}
               windowStart={windowStart}
               windowEnd={windowEnd}
+              onResult={setQuantumPreview}
   />
             <QuantumComparison
               request={request}

@@ -15,12 +15,14 @@ interface QuantumOptimizerProps {
   request: ScheduleRequest;
   windowStart: string | null | undefined;
   windowEnd: string | null | undefined;
+  onResult?: (result: QuantumResult | null) => void;
 }
 
 export function QuantumOptimizer({
   request,
   windowStart,
   windowEnd,
+  onResult,
 }: QuantumOptimizerProps) {
   const [solver, setSolver] =
     useState<QuantumSolver>("quantum");
@@ -43,6 +45,7 @@ export function QuantumOptimizer({
     setLoading(true);
     setError(null);
     setResult(null);
+    onResult?.(null);
 
     try {
       const response = await optimizeSchedule(
@@ -59,6 +62,7 @@ export function QuantumOptimizer({
       );
 
       setResult(response);
+      onResult?.(response);
     } catch (err) {
       setError(
         err instanceof Error

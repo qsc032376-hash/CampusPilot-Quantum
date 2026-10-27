@@ -71,7 +71,7 @@ export async function optimizeSchedule(
       locations: [],
     },
     solver: options.solver,
-    slot_minutes: 60,
+    slot_minutes: 120,
     p: options.p ?? 1,
     maxiter: options.maxiter ?? 50,
     shots: options.shots ?? 512,
