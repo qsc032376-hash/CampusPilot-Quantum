@@ -42,6 +42,20 @@ Open the Local URL printed by Vite, usually http://127.0.0.1:5173. If that port 
 
 The `quantum-backend/` service exposes classical and QAOA schedule comparisons on `http://127.0.0.1:8000`. The React optimizer calls this local service; the other planner features work without it. QAOA runs with Qiskit's local statevector simulator and does not submit jobs to quantum hardware. The demo accepts at most 12 candidate time slots. In **Multi-Objective Optimization**, use **Candidate Slot Length** to adjust the time grid (60–240 minutes). Longer slots produce fewer candidate start times and can keep the problem under the 12-variable limit, at the cost of less precise scheduling.
 
+### How the Qiskit QAOA comparison works
+
+The quantum backend turns a scheduling request into a small binary optimization problem before running QAOA:
+
+1. **Generate candidate schedules.** A candidate is one complete, uninterrupted start time for one task. Candidates are placed on a grid anchored at the start of the scheduling window, must respect the task's `notBefore` and deadline, and are removed if they overlap a class or unavailable period. The selected slot length controls the grid spacing; task duration stays unchanged.
+2. **Build a QUBO cost function.** Each candidate has a binary variable (`1` selects it, `0` skips it). The cost rewards task priority (low/medium/high weights are 1/3/5) and adds penalties for selecting two starts for the same task or overlapping candidates. The early-completion objective adds a small cost for later task completion. The compactness objective also penalizes gaps between selected tasks. The weights `α` and `β` tune these secondary preferences; the backend checks that they remain small enough to preserve priority as the primary objective.
+3. **Convert QUBO to an Ising Hamiltonian.** The binary cost is rewritten using Pauli-Z terms. QAOA prepares a uniform superposition, then repeats a cost-evolution step and a mixing step for `p` layers. The circuit parameters are tuned with SciPy's COBYLA optimizer to reduce the expected QUBO cost.
+4. **Simulate and sample.** Qiskit's `Statevector` computes the ideal circuit probabilities locally. The backend draws the configured number of simulated measurement shots, discards infeasible assignments, and returns the lowest-cost feasible schedule it sampled. If no feasible assignment is sampled, the comparison marks that an empty all-zero fallback was used.
+5. **Compare against an exact classical reference.** The backend exhaustively checks assignments for the same QUBO and reports the classical optimum alongside the QAOA sample. For this bounded demo, the exact result is the reference optimum; QAOA is approximate and is not expected to beat it. Metrics include schedule quality, QUBO cost, expected QUBO cost, optimality gap, circuit depth, feasible sample count and runtime.
+
+This is a software simulation, not a run on a quantum processor. Statevector memory and computation grow exponentially with the number of binary variables, so both comparison endpoints cap the problem at **12 candidate variables**. A task may create many candidates even when the task count is small; narrow the scheduling window or increase **Candidate Slot Length** if the limit is exceeded. QAOA results can vary with layer count, optimizer convergence, shot count and random seed, and an approximate result may be worse than the exact classical schedule.
+
+The main implementation is in `quantum-backend/campus_adapter.py` (candidate generation), `multiobjective_qubo.py` and `compactness_qubo.py` (cost functions), `qubo_model.py` (QUBO/Ising conversion), `qaoa_solver.py` and `general_qaoa.py` (Qiskit circuit and statevector sampling), and `multiobjective_api.py` / `compactness_api.py` (comparison endpoints).
+
 Use Python 3.10 or newer. Create the environment from the repository root:
 
 ### macOS / Linux
