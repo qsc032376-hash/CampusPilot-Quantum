@@ -1,5 +1,5 @@
 
-"""CampusPilot Quantum Optimization API — Phase 1.9."""
+"""CampusPilot Quantum Optimization API."""
 from multiobjective_api import router as multiobjective_router
 from typing import Any
 from time import perf_counter
@@ -14,9 +14,11 @@ from qaoa_solver import solve_qaoa
 from compactness_api import router as compactness_router
 
 
+APP_VERSION = "2.1.4"
+
 app = FastAPI(
     title="CampusPilot Quantum API",
-    version="0.1.0",
+    version=APP_VERSION,
     description="Classical and QAOA campus scheduling."
 )
 app.include_router(multiobjective_router)
@@ -63,7 +65,7 @@ def health():
     return {
         "status": "ok",
         "service": "CampusPilot Quantum",
-        "version": "0.1.0",
+        "version": APP_VERSION,
     }
 
 

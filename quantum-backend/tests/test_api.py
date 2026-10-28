@@ -33,6 +33,7 @@ def test_health():
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.json()["version"] == "2.1.4"
 
 
 def test_classical_optimization():
