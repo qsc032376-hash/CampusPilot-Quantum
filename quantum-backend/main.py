@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from campus_adapter import prepare_optimization_input
 from scheduling_qubo import solve_exact
 from qaoa_solver import solve_qaoa
+from compactness_api import router as compactness_router
 
 
 app = FastAPI(
@@ -19,6 +20,7 @@ app = FastAPI(
     description="Classical and QAOA campus scheduling."
 )
 app.include_router(multiobjective_router)
+app.include_router(compactness_router)
 
 # Local development only.
 app.add_middleware(

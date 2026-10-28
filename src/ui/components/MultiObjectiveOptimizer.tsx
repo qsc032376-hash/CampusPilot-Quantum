@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ScheduleRequest } from "../../types.ts";
 import {
   compareMultiObjective,
+  compareCompactness,
   type MultiObjectiveComparison,
 } from "../../features/quantum-optimization/api.ts";
 
@@ -38,6 +39,11 @@ export function MultiObjectiveOptimizer({
   windowEnd,
 }: Props) {
   const [alpha, setAlpha] = useState(0.05);
+  const [beta, setBeta] = useState(0.005);
+
+  const [objective, setObjective] = useState<
+  "early" | "compactness"
+>("compactness");
   const [p, setP] = useState(2);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +61,17 @@ export function MultiObjectiveOptimizer({
     setResult(null);
 
     try {
-      const data = await compareMultiObjective(
+      const data =
+  objective === "compactness"
+    ? await compareCompactness(
+        request,
+        windowStart,
+        windowEnd,
+        alpha,
+        beta,
+        p
+      )
+    : await compareMultiObjective(
         request,
         windowStart,
         windowEnd,
@@ -90,26 +106,78 @@ export function MultiObjectiveOptimizer({
       <div className="cp-form">
         <label className="cp-field">
           <span className="cp-field__label">
-            Early Completion Weight α: {alpha.toFixed(2)}
+            Optimization Objective
           </span>
 
-          <input
-            type="range"
-            min={0}
-            max={0.1}
-            step={0.01}
-            value={alpha}
+          <select
+            className="cp-input"
+            value={objective}
             onChange={(event) => {
-              setAlpha(Number(event.target.value));
+              setObjective(
+                event.target.value as "early" | "compactness"
+              );
               setResult(null);
             }}
-          />
-        </label>
+            >
+            <option value="early">
+                Priority + Early Completion
+            </option>
+            <option value="compactness">
+                Priority + Early Completion + Compactness
+            </option>
+        </select>
+    </label>
+
+    <label className="cp-field">
+    <span className="cp-field__label">
+      Early Completion Weight α: {alpha.toFixed(2)}
+    </span>
+
+    <input
+        type="range"
+        min={0}
+        max={0.1}
+        step={0.01}
+        value={alpha}
+        onChange={(event) => {
+        setAlpha(Number(event.target.value));
+        setResult(null);
+        }}
+        />
+    </label>
 
         <p className="cp-hint">
           α = 0 uses priority and conflict costs only.
           Higher α prefers earlier completion.
         </p>
+
+        {objective === "compactness" && (
+  <>
+    <label className="cp-field">
+      <span className="cp-field__label">
+        Compactness Weight β: {beta.toFixed(3)}
+      </span>
+
+      <input
+        type="range"
+        min="0"
+        max="0.02"
+        step="0.001"
+        value={beta}
+        onChange={(event) => {
+          setBeta(Number(event.target.value));
+          setResult(null);
+        }}
+      />
+    </label>
+
+    <p className="cp-hint">
+      Higher β penalizes larger gaps between scheduled
+      tasks. The maximum safe value depends on the
+      number of candidate variables.
+    </p>
+  </>
+)}
 
         <label className="cp-field">
           <span className="cp-field__label">
@@ -152,11 +220,15 @@ export function MultiObjectiveOptimizer({
         <div style={{ marginTop: 24 }}>
           <h3>Schedule Quality Comparison</h3>
 
-          <p className="cp-hint">
+        <p className="cp-hint">
             Candidate variables: {result.candidateCount}
             {" · "}
             α = {result.alpha.toFixed(2)}
-          </p>
+            {" · "}
+            Objective: {result.objective}
+            {result.objective === "compactness" &&
+                ` · β = ${beta.toFixed(3)}`}
+        </p>
 
           <div style={{ overflowX: "auto" }}>
             <table

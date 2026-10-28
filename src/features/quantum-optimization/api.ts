@@ -183,3 +183,48 @@ export async function optimizeSchedule(
 
   return (await response.json()) as QuantumResult;
 }
+
+
+export async function compareCompactness(
+  request: ScheduleRequest,
+  windowStart: string,
+  windowEnd: string,
+  alpha = 0.05,
+  beta = 0.005,
+  p = 2
+): Promise<MultiObjectiveComparison> {
+  const response = await fetch(
+    `${API_BASE}/api/compactness/compare`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        request: buildQuantumRequest(
+          request,
+          windowStart,
+          windowEnd
+        ),
+        slot_minutes: 120,
+        alpha,
+        beta,
+        p,
+        maxiter: 100,
+        shots: 2048,
+        seed: 42,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(
+      typeof body?.detail === "string"
+        ? body.detail
+        : `Compactness API error: ${response.status}`
+    );
+  }
+
+  return (await response.json()) as MultiObjectiveComparison;
+}
