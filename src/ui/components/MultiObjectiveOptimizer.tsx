@@ -328,10 +328,12 @@ export function MultiObjectiveOptimizer({
             {result.optimalityGap.toFixed(4)}
           </p>
 
-          <p className="cp-hint">
-            {result.sameOptimalValue
-              ? "QAOA sampled a globally optimal QUBO solution."
-              : "QAOA did not reach the exact optimum."}
+          <p className="cp-hint" role="status">
+            {quantum.fallbackUsed
+              ? "QAOA found no feasible sampled assignment; the all-zero fallback is shown."
+              : result.sameOptimalValue
+                ? "QAOA sampled a globally optimal QUBO solution."
+                : "QAOA did not reach the exact optimum."}
           </p>
 
           <h3>Quantum Schedule</h3>
