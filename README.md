@@ -1,6 +1,6 @@
 # CampusPilot
 
-One React + Vite + TypeScript web app for an Ohio State University hackathon. No database, API keys, external AI API, routing library, or backend. Data is in memory and resets on reload.
+React + Vite + TypeScript web app for an Ohio State University hackathon. The core planner runs in the browser; an optional local FastAPI service powers the experimental QAOA comparison. No database or external AI API is used. App data is in memory and resets on reload.
 
 ## Prerequisites
 
@@ -36,6 +36,32 @@ npm run dev
 
 Open the Local URL printed by Vite, usually http://127.0.0.1:5173. If that port is busy, Vite prints the next available port. Stop the server with Ctrl+C.
 
+## Optional quantum optimization backend
+
+The `quantum-backend/` service exposes classical and QAOA schedule comparisons on `http://127.0.0.1:8000`. The React optimizer calls this local service; the other planner features work without it. QAOA runs with Qiskit's local statevector simulator and does not submit jobs to quantum hardware. The demo accepts at most 12 candidate time slots.
+
+Use Python 3.10 or newer. Create the environment from the repository root:
+
+### macOS / Linux
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r quantum-backend/requirements.txt
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000 --app-dir quantum-backend
+```
+
+### Windows (PowerShell)
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r quantum-backend/requirements.txt
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000 --app-dir quantum-backend
+```
+
+Keep the backend running, then start the frontend in a second terminal with `npm run dev`. Open Vite's Local URL. Stop either server with Ctrl+C.
+
 ## Run and test
 
 ```sh
@@ -43,6 +69,7 @@ npm test
 node --test tests/scheduler.test.ts tests/ui-format.test.ts tests/campus-locations.test.ts
 node tests/render-check.mjs
 node tests/browser-check.mjs
+python -m pytest quantum-backend/tests -q
 npm run build
 npm run preview
 ```

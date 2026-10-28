@@ -17,3 +17,7 @@ secrets/
 *.pfx
 credentials.json
 service-account*.json
+# Python quantum backend
+.venv/
+__pycache__/
+*.py[cod]
