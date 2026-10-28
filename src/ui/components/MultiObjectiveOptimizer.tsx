@@ -99,7 +99,9 @@ export function MultiObjectiveOptimizer({
       <div className="cp-panel__head">
         <h2>Multi-Objective Optimization</h2>
         <p className="cp-panel__meta">
-          Priority + Early Completion · Experimental
+          {objective === "compactness"
+            ? "Priority + Early Completion + Compactness · Experimental"
+            : "Priority + Early Completion · Experimental"}
         </p>
       </div>
 
@@ -225,9 +227,9 @@ export function MultiObjectiveOptimizer({
             {" · "}
             α = {result.alpha.toFixed(2)}
             {" · "}
-            Objective: {result.objective}
+            Objective: {result.objective === "compactness" ? "Compactness" : "Early completion"}
             {result.objective === "compactness" &&
-                ` · β = ${beta.toFixed(3)}`}
+                ` · β = ${(result.beta ?? beta).toFixed(3)}`}
         </p>
 
           <div style={{ overflowX: "auto" }}>

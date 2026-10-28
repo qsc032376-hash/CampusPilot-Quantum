@@ -95,6 +95,7 @@ export interface MultiObjectiveComparison {
   status: string;
   objective: string;
   alpha: number;
+  beta?: number;
   candidateCount: number;
   classical: MultiObjectiveSolution;
   quantum: MultiObjectiveSolution;
