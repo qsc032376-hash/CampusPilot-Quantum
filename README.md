@@ -2,6 +2,8 @@
 
 React + Vite + TypeScript web app for an Ohio State University hackathon. The core planner runs in the browser; an optional local FastAPI service powers the experimental QAOA comparison. No database or external AI API is used. App data is in memory and resets on reload.
 
+Current project version: **2.1.4**.
+
 ## Prerequisites
 
 Use Node.js **24.x** with its bundled npm on all four development machines. This project uses Node's built-in TypeScript support for tests. `.nvmrc` specifies major version 24 for developers using nvm.
