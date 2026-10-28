@@ -38,7 +38,7 @@ Open the Local URL printed by Vite, usually http://127.0.0.1:5173. If that port 
 
 ## Optional quantum optimization backend
 
-The `quantum-backend/` service exposes classical and QAOA schedule comparisons on `http://127.0.0.1:8000`. The React optimizer calls this local service; the other planner features work without it. QAOA runs with Qiskit's local statevector simulator and does not submit jobs to quantum hardware. The demo accepts at most 12 candidate time slots.
+The `quantum-backend/` service exposes classical and QAOA schedule comparisons on `http://127.0.0.1:8000`. The React optimizer calls this local service; the other planner features work without it. QAOA runs with Qiskit's local statevector simulator and does not submit jobs to quantum hardware. The demo accepts at most 12 candidate time slots. In **Multi-Objective Optimization**, use **Candidate Slot Length** to adjust the time grid (60–240 minutes). Longer slots produce fewer candidate start times and can keep the problem under the 12-variable limit, at the cost of less precise scheduling.
 
 Use Python 3.10 or newer. Create the environment from the repository root:
 

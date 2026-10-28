@@ -110,7 +110,8 @@ export async function compareMultiObjective(
   windowStart: string,
   windowEnd: string,
   alpha = 0.05,
-  p = 2
+  p = 2,
+  slotMinutes = 120
 ): Promise<MultiObjectiveComparison> {
   const response = await fetch(
     `${API_BASE}/api/multiobjective/compare`,
@@ -125,7 +126,7 @@ export async function compareMultiObjective(
           windowStart,
           windowEnd
         ),
-        slot_minutes: 120,
+        slot_minutes: slotMinutes,
         alpha,
         p,
         maxiter: 100,
@@ -194,7 +195,8 @@ export async function compareCompactness(
   windowEnd: string,
   alpha = 0.05,
   beta = 0.005,
-  p = 2
+  p = 2,
+  slotMinutes = 120
 ): Promise<MultiObjectiveComparison> {
   const response = await fetch(
     `${API_BASE}/api/compactness/compare`,
@@ -209,7 +211,7 @@ export async function compareCompactness(
           windowStart,
           windowEnd
         ),
-        slot_minutes: 120,
+        slot_minutes: slotMinutes,
         alpha,
         beta,
         p,

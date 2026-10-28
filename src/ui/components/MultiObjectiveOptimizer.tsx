@@ -40,6 +40,7 @@ export function MultiObjectiveOptimizer({
 }: Props) {
   const [alpha, setAlpha] = useState(0.05);
   const [beta, setBeta] = useState(0.005);
+  const [slotMinutes, setSlotMinutes] = useState(120);
 
   const [objective, setObjective] = useState<
   "early" | "compactness"
@@ -69,14 +70,16 @@ export function MultiObjectiveOptimizer({
         windowEnd,
         alpha,
         beta,
-        p
+        p,
+        slotMinutes
       )
     : await compareMultiObjective(
         request,
         windowStart,
         windowEnd,
         alpha,
-        p
+        p,
+        slotMinutes
       );
 
       setResult(data);
@@ -180,6 +183,32 @@ export function MultiObjectiveOptimizer({
     </p>
   </>
 )}
+
+        <label className="cp-field">
+          <span className="cp-field__label">
+            Candidate Slot Length
+          </span>
+
+          <select
+            className="cp-input"
+            value={slotMinutes}
+            onChange={(event) => {
+              setSlotMinutes(Number(event.target.value));
+              setResult(null);
+            }}
+          >
+            <option value={60}>60 minutes</option>
+            <option value={120}>120 minutes</option>
+            <option value={180}>180 minutes</option>
+            <option value={240}>240 minutes</option>
+          </select>
+        </label>
+
+        <p className="cp-hint">
+          Longer slots reduce the candidate count and help
+          stay within the 12-variable demo limit, with less
+          precise start times.
+        </p>
 
         <label className="cp-field">
           <span className="cp-field__label">
