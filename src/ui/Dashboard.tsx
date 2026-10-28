@@ -21,6 +21,7 @@ import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
 import { QuantumOptimizer } from './components/QuantumOptimizer.tsx';
+import { MultiObjectiveOptimizer } from './components/MultiObjectiveOptimizer.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
 import { RecommendedLocations } from './components/RecommendedLocations.tsx';
 import { ReservationPlanner } from './components/ReservationPlanner.tsx';
@@ -540,13 +541,18 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
               windowStart={windowStart}
               windowEnd={windowEnd}
               onResult={setQuantumPreview}
-  />
+            />
             <QuantumComparison
               request={request}
               windowStart={windowStart}
               windowEnd={windowEnd}
-  />
-</div>
+            />
+            <MultiObjectiveOptimizer
+              request={request}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+            />
+          </div>
 
       </main>
 

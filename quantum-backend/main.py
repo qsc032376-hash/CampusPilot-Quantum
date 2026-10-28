@@ -1,6 +1,6 @@
 
 """CampusPilot Quantum Optimization API — Phase 1.9."""
-
+from multiobjective_api import router as multiobjective_router
 from typing import Any
 from time import perf_counter
 
@@ -18,6 +18,7 @@ app = FastAPI(
     version="0.1.0",
     description="Classical and QAOA campus scheduling."
 )
+app.include_router(multiobjective_router)
 
 # Local development only.
 app.add_middleware(
