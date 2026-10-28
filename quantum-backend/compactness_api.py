@@ -136,6 +136,10 @@ def compare_compactness(body: CompactnessRequest):
                 "fallbackUsed": quality["quantum"][
                     "fallbackUsed"
                 ],
+                "feasibleSampleCount": quality["quantum"][
+                    "feasibleSampleCount"
+                ],
+                "shots": quality["quantum"]["shots"],
             },
             "optimalityGap": quality["optimalityGap"],
             "sameOptimalValue": quality["sameOptimalValue"],

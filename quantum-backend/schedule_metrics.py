@@ -257,6 +257,10 @@ def compare_solutions(
             "metrics": quantum_metrics,
             "circuitDepth": quantum["circuit"].depth(),
             "expectedCost": float(quantum["expectedCost"]),
+            "feasibleSampleCount": int(
+                quantum.get("feasibleSampleCount", 0)
+            ),
+            "shots": int(quantum.get("shots", 0)),
             "fallbackUsed": bool(
                 quantum.get("fallbackUsed", False)
             ),

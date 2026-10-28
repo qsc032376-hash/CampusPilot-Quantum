@@ -88,6 +88,8 @@ export interface MultiObjectiveSolution {
   metrics: ScheduleQualityMetrics;
   expectedCost?: number;
   circuitDepth?: number;
+  feasibleSampleCount?: number;
+  shots?: number;
   fallbackUsed?: boolean;
 }
 

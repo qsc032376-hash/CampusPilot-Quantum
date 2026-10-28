@@ -311,6 +311,23 @@ export function MultiObjectiveOptimizer({
                   <td>{quantum.cost.toFixed(4)}</td>
                 </tr>
                 <tr>
+                  <td>Expected QUBO Cost</td>
+                  <td>—</td>
+                  <td>{quantum.expectedCost?.toFixed(4) ?? "N/A"}</td>
+                </tr>
+                <tr>
+                  <td>Feasible QAOA Samples</td>
+                  <td>—</td>
+                  <td>
+                    {quantum.feasibleSampleCount ?? "N/A"} / {quantum.shots ?? "N/A"}
+                  </td>
+                </tr>
+                <tr>
+                  <td>QAOA Circuit Depth</td>
+                  <td>—</td>
+                  <td>{quantum.circuitDepth ?? "N/A"}</td>
+                </tr>
+                <tr>
                   <td>Runtime</td>
                   <td>
                     {classical.executionSeconds.toFixed(3)}s
