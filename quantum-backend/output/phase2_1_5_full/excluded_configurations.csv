@@ -1,0 +1,2 @@
+experiment_id,instance_id,candidate_count,alpha,beta,p,seed,maxiter,shots,reason
+weight_bound_guard,synthetic-n12,12,0.05,0.02,2,42,100,2048,secondary objective bound is not < 1: alpha*n + beta*n*(n-1)/2 = 1.92

@@ -1,0 +1,38 @@
+{
+  "mode": "quick",
+  "alpha": 0.05,
+  "beta": 0.005,
+  "p": 2,
+  "maxiter": 25,
+  "shots": 256,
+  "slot_minutes": 120,
+  "random_seeds": [
+    42,
+    43
+  ],
+  "beta_sensitivity_values": [
+    0.0,
+    0.005,
+    0.02
+  ],
+  "depth_values": [
+    1,
+    2
+  ],
+  "scaling_candidate_counts": [
+    3,
+    5
+  ],
+  "probability_method": "full noiseless Qiskit Statevector distribution",
+  "optimality_absolute_tolerance": 1e-08,
+  "synthetic_instance_definition": "adapter-generated 60-minute tasks, 120-minute grid, 3 priority levels, deadlines and overlapping alternatives",
+  "versions": {
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "qiskit": "2.6.1",
+    "matplotlib": "3.11.2"
+  },
+  "executed_runs": 9,
+  "excluded_configurations": 1
+}

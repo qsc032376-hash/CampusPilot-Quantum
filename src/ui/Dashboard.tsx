@@ -1,3 +1,6 @@
+import type { QuantumResult } from '../features/quantum-optimization/api.ts';
+import { QuantumSchedulePreview } from './components/QuantumSchedulePreview.tsx';
+import { QuantumComparison } from './components/QuantumComparison.tsx';
 import { useMemo, useState } from 'react';
 import type { ScheduleRequest } from '../types.ts';
 import type { MultiDayScheduleResponse } from '../features/multi-day-schedule/index.ts';
@@ -17,6 +20,8 @@ import type { TaskMode } from './components/TaskModeSwitch.tsx';
 import type { OneOffFromSeries } from './components/RecurringTaskForm.tsx';
 import { WeeklySchedule } from './components/WeeklySchedule.tsx';
 import { ScheduleResults } from './components/ScheduleResults.tsx';
+import { QuantumOptimizer } from './components/QuantumOptimizer.tsx';
+import { MultiObjectiveOptimizer } from './components/MultiObjectiveOptimizer.tsx';
 import { LocationCard } from './components/LocationCard.tsx';
 import { RecommendedLocations } from './components/RecommendedLocations.tsx';
 import { ReservationPlanner } from './components/ReservationPlanner.tsx';
@@ -65,6 +70,8 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
   const [range, setRange] = useState<ScheduleRange>(initialRange);
   const [multi, setMulti] = useState<MultiDayScheduleResponse | null>(null);
   /** True once a plan has succeeded; drives recovery after an invalid edit. */
+  const [quantumPreview, setQuantumPreview] =
+  useState<QuantumResult | null>(null);
   const [hasBuilt, setHasBuilt] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(initialRange.startDate);
@@ -271,6 +278,7 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
    */
   function handleSelectDate(date: string) {
     setSelectedDate(date);
+    setQuantumPreview(null);
   }
 
   function handleSelectBlock(id: string | null) {
@@ -508,10 +516,15 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             selectedId={selectedId}
             onSelect={handleSelectBlock}
           />
+          <QuantumSchedulePreview
+            result={quantumPreview}
+            windowStart={windowStart}
+            windowEnd={windowEnd}
+/>
         </div>
 
         <div className="cp-column">
-          <ScheduleResults
+            <ScheduleResults
             request={request}
             series={series}
             multi={multi}
@@ -521,8 +534,26 @@ export function Dashboard({ request: initialRequest, now = () => new Date() }: D
             selectedId={selectedId}
             onSelect={handleSelectBlock}
             onSelectDate={handleSelectDate}
-          />
-        </div>
+  />
+
+            <QuantumOptimizer
+              request={request}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+              onResult={setQuantumPreview}
+            />
+            <QuantumComparison
+              request={request}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+            />
+            <MultiObjectiveOptimizer
+              request={request}
+              windowStart={windowStart}
+              windowEnd={windowEnd}
+            />
+          </div>
+
       </main>
 
       <AssistantPanel />
